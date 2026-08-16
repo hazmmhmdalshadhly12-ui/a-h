@@ -35,14 +35,32 @@ export function useExam(examId) {
   useEffect(() => {
     if (!examId || !profile) return;
     let active = true;
-    Promise.all([fetchExamById(examId), fetchSubmissionForExam(profile.id, examId)]).then(
-      ([examRes, subRes]) => {
-        if (!active) return;
-        setExam(examRes.data);
-        setSubmission(subRes.data);
-        setLoading(false);
+
+    setLoading(true);
+
+    // جلب الامتحان والتسليم بشكل منفصل لمنع توقف الصفحة إذا لم يكن هناك تسليم سابق
+    Promise.allSettled([
+      fetchExamById(examId),
+      fetchSubmissionForExam(profile.id, examId)
+    ]).then(([examRes, subRes]) => {
+      if (!active) return;
+
+      if (examRes.status === 'fulfilled') {
+        setExam(examRes.value?.data || examRes.value);
       }
-    );
+
+      if (subRes.status === 'fulfilled') {
+        setSubmission(subRes.value?.data || subRes.value);
+      } else {
+        setSubmission(null); // لا يوجد تسليم سابق بعد
+      }
+
+      setLoading(false);
+    }).catch((err) => {
+      console.error("Error loading exam:", err);
+      if (active) setLoading(false);
+    });
+
     return () => {
       active = false;
     };
