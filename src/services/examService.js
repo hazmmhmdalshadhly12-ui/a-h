@@ -25,20 +25,30 @@ export async function fetchExamsForStudent(studentId, grade) {
   return { data, error: null };
 }
 
-/** جلب الامتحان نفسه (بياناته فقط — من غير الأسئلة الحساسة) */
+/* جلب الامتحان نفسه (بياناته فقط - من غير الأسئلة الحساسة) */
 export async function fetchExamById(examId) {
-  return supabase.from('exams').select('*').eq('id', examId).maybeSingle();
+  const { data, error } = await supabase
+    .from('exams')
+    .select('*')
+    .eq('id', examId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error in fetchExamById:", error);
+    return null;
+  }
+  return data;
 }
 
-/**
- * أسئلة الامتحان للطالب — من غير الإجابة الصحيحة إطلاقاً.
- * بتيجي من Function على قاعدة البيانات (security definer) مش select مباشر
- * عشان منع أي وصول للإجابات قبل التسليم.
- */
+/* أسئلة الامتحان للطالب - من غير الإجابة الصحيحة */
 export async function fetchExamQuestionsForStudent(examId) {
   const { data, error } = await supabase.rpc('get_exam_questions', { p_exam_id: examId });
-  if (error) return { data: [], error };
-  return { data: data || [], error: null };
+
+  if (error) {
+    console.error("Error fetching questions RPC:", error);
+    return [];
+  }
+  return data || [];
 }
 
 // ===== واجهة الأدمن =====
