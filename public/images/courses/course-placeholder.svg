@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360">
+  <rect width="640" height="360" fill="#111A33"/>
+  <g stroke="#1F2D54" stroke-width="3">
+    <path d="M0 300h640"/><path d="M0 240h640"/><path d="M0 180h640"/>
+    <path d="M160 360V0"/><path d="M320 360V0"/><path d="M480 360V0"/>
+  </g>
+  <path d="M0 340 C160 240 200 220 320 260 S 520 180 640 220" fill="none" stroke="#5EEAD4" stroke-width="4"/>
+  <circle cx="320" cy="258" r="10" fill="#F5B741"/>
+  <text x="320" y="60" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="28" fill="#F6F3EA">&lt;code&gt;</text>
+  <text x="320" y="100" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="20" fill="#5EEAD4">const vision = new Future();</text>
+</svg>
