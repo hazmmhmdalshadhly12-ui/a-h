@@ -43,19 +43,38 @@ export function useExam(examId) {
       };
     }
 
-    Promise.all([fetchExamById(examId), fetchSubmissionForExam(profile.id, examId)])
-      .then(([examRes, subRes]) => {
+    // جلب الامتحان والتسليم بشكل مستقل:
+    // لو جلب الـ submission فشل مش هيلغي الامتحان (يظهر "الامتحان غير موجود" خطأ)
+    const pid = profile.id;
+
+    fetchExamById(examId)
+      .then((examRes) => {
         if (!active) return;
+        if (examRes.error) {
+          console.error('[useExam] fetchExamById error:', examRes.error);
+          setExam(null);
+          return;
+        }
         setExam(examRes.data);
-        setSubmission(subRes.data);
-      })
-      .catch(() => {
-        if (!active) return;
-        setExam(null);
-        setSubmission(null);
       })
       .finally(() => {
         if (active) setLoading(false);
+      });
+
+    fetchSubmissionForExam(pid, examId)
+      .then((subRes) => {
+        if (!active) return;
+        if (subRes.error) {
+          console.error('[useExam] fetchSubmissionForExam error:', subRes.error);
+          setSubmission(null);
+          return;
+        }
+        setSubmission(subRes.data);
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.error('[useExam] fetchSubmissionForExam threw:', err);
+        setSubmission(null);
       });
 
     return () => {
