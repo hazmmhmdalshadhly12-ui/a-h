@@ -8,7 +8,6 @@ import { useToast } from '../../components/ui/Toast.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 import Button from '../../components/ui/Button.jsx';
-import Skeleton from '../../components/ui/Skeleton.jsx';
 import VisionLoader from '../../components/vision/VisionLoader.jsx';
 import ExamHeader from '../../components/exam/ExamHeader.jsx';
 import ExamTimer from '../../components/exam/ExamTimer.jsx';
@@ -16,7 +15,6 @@ import QuestionRenderer from '../../components/exam/QuestionRenderer.jsx';
 import QuestionNavigation from '../../components/exam/QuestionNavigation.jsx';
 import ExamProgress from '../../components/exam/ExamProgress.jsx';
 import SubmitExamModal from '../../components/exam/SubmitExamModal.jsx';
-import { validateAnswersComplete } from '../../utils/examHelpers.js';
 import { formatDate } from '../../utils/formatDate.js';
 
 export default function TakeExam() {
@@ -32,6 +30,9 @@ export default function TakeExam() {
   const [modalOpen, setModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [preparing, setPreparing] = useState(true);
+  const submittingRef = useRef(false);
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
 
   // جلب الأسئلة (من غير الإجابات الصحيحة) — عشان المراجعة بعد التسليم كمان
   useEffect(() => {
@@ -72,9 +73,15 @@ export default function TakeExam() {
     setAnswers((a) => ({ ...a, [qid]: value }));
   }, []);
 
+  // doSubmit: دالة مستقرة (بتقرأ الإجابات من ref) ومحمية من الاستدعاء الخاطئ.
+  // بتتنفذ بس من زر التأكيد أو انتهاء الوقت الفعلي — مش أثناء الـ Mount.
   const doSubmit = useCallback(async () => {
+    if (submittingRef.current) return;
+    if (alreadySubmitted) return;
+    submittingRef.current = true;
     setSubmitting(true);
-    const { data, error } = await submitExam(examId, answers);
+    const { error } = await submitExam(examId, answersRef.current);
+    submittingRef.current = false;
     setSubmitting(false);
     setModalOpen(false);
 
@@ -91,7 +98,7 @@ export default function TakeExam() {
 
     toast.success('تم تسليم الامتحان بنجاح ✅');
     navigate(`/student/exams/${examId}`, { replace: true });
-  }, [answers, examId, navigate, toast]);
+  }, [examId, navigate, toast, alreadySubmitted]);
 
   // ===== شاشات الحالات =====
   if (loading) return <VisionLoader />;
