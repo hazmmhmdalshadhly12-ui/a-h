@@ -1,0 +1,37 @@
+export const PUBLIC_NAV = [
+  { label: 'الرئيسية', path: '/' },
+  { label: 'الكورسات', path: '/courses' },
+  { label: 'عن الأكاديمية', path: '/about' },
+  { label: 'التواصل', path: '/contact' }
+];
+
+export const STUDENT_NAV = [
+  { label: 'لوحة الطالب', path: '/student/dashboard', icon: 'dashboard' },
+  { label: 'الكورسات', path: '/student/courses', icon: 'courses' },
+  { label: 'الامتحانات', path: '/student/exams', icon: 'exams' },
+  { label: 'درجاتي', path: '/student/grades', icon: 'grades' },
+  { label: 'الحجوزات', path: '/student/bookings', icon: 'bookings' },
+  { label: 'المسابقات', path: '/student/competitions', icon: 'competitions' },
+  { label: 'الإشعارات', path: '/student/notifications', icon: 'notifications' }
+];
+
+export const ADMIN_NAV = [
+  {
+    section: 'الإدارة',
+    items: [
+      { label: 'نظرة عامة', path: '/admin', icon: 'dashboard', end: true },
+      { label: 'الامتحانات', path: '/admin/exams', icon: 'exams' },
+      { label: 'الكورسات', path: '/admin/courses', icon: 'courses' },
+      { label: 'الحجوزات', path: '/admin/bookings', icon: 'bookings' },
+      { label: 'المسابقات', path: '/admin/competitions', icon: 'competitions' }
+    ]
+  },
+  {
+    section: 'المنصة',
+    items: [
+      { label: 'الطلاب', path: '/admin/students', icon: 'students' },
+      { label: 'روابط التواصل', path: '/admin/contacts', icon: 'contacts' },
+      { label: 'الإعدادات', path: '/admin/settings', icon: 'settings' }
+    ]
+  }
+];
