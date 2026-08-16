@@ -33,7 +33,6 @@ export default function TakeExam() {
 
   useEffect(() => {
     if (!examId) return;
-
     let active = true;
 
     if (exam) {
@@ -85,6 +84,7 @@ export default function TakeExam() {
   }, []);
 
   const doSubmit = useCallback(async () => {
+    if (submitting) return;
     setSubmitting(true);
     const { data, error } = await submitExam(examId, answers);
     setSubmitting(false);
@@ -92,7 +92,7 @@ export default function TakeExam() {
 
     if (error) {
       if (error.code === '23505' || error.message?.includes('already submitted')) {
-        toast.error('أنت سلمت هذا الامتحان من قبل - محاولة واحدة فقط');
+        toast.error('أنت سلمت هذا الامتحان من قبل');
       } else {
         toast.error(error.message || 'فشل التسليم، حاول مرة أخرى');
       }
@@ -102,9 +102,152 @@ export default function TakeExam() {
 
     toast.success('تم تسليم الامتحان بنجاح! 🎯');
     navigate(`/student/exams/${examId}`, { replace: true });
-  }, [answers, examId, navigate, toast]);
+  }, [answers, examId, navigate, toast, submitting]);
 
-  if (loading) return <VisionLoader />;
+  if (loading || preparing) return <VisionLoader message="جاري تحميل الامتحان..." />;
+
+  if (!exam) {
+    return (
+      <Card className="flex flex-col items-center gap-4 py-14 text-center">
+        <p className="text-muted">الامتحان غير موجود</p>
+        <Link to="/student/exams">
+          <Button variant="secondary">الرجوع للائمتحانات</Button>
+        </Link>
+      </Card>
+    );
+  }
+
+  if (alreadySubmitted) {
+    return <SubmittedView exam={exam} submission={submission} questions={questions} answers={answers} />;
+  }
+
+  if (!nowOpen) {
+    return (
+      <Card className="flex flex-col items-center gap-4 py-14 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-paper">⏳</div>
+        <p className="font-display text-lg font-bold">الامتحان مش متاح حالياً</p>
+        <Link to="/student/exams">
+          <Button variant="secondary">رجوع</Button>
+        </Link>
+      </Card>
+    );
+  }
+
+  if (questions.length === 0) {
+    return (
+      <Card className="flex flex-col items-center gap-4 py-14 text-center">
+        <p className="text-muted">لا توجد أسئلة مضافة لهذا الامتحان بعد.</p>
+        <Link to="/student/exams">
+          <Button variant="secondary">رجوع</Button>
+        </Link>
+      </Card>
+    );
+  }
+
+  const question = questions[current];
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-5">
+      <ExamHeader exam={exam} />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {Number(exam.duration_minutes) > 0 ? (
+          <ExamTimer seconds={Number(exam.duration_minutes) * 60} onExpire={doSubmit} />
+        ) : (
+          <Badge color="muted">بدون وقت محدد</Badge>
+        )}
+        <ExamProgress answeredCount={answerCount} total={questions.length} />
+      </div>
+
+      <Card key={question.id} className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="font-display text-lg font-bold leading-relaxed">
+            <span className="ml-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-paper text-sm">
+              {current + 1}
+            </span>
+            {question.question_text}
+          </h2>
+          <Badge color="muted">{question.points} نقاط</Badge>
+        </div>
+        <QuestionRenderer question={question} value={answers[question.id]} onChange={(v) => handleChange(question.id, v)} />
+      </Card>
+
+      <Card>
+        <QuestionNavigation questions={questions} answers={answers} current={current} onSelect={setCurrent} />
+      </Card>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Button variant="secondary" disabled={current === 0} onClick={() => setCurrent((c) => c - 1)}>
+          السابق
+        </Button>
+        {current < questions.length - 1 ? (
+          <Button onClick={() => setCurrent((c) => c + 1)}>التالي</Button>
+        ) : (
+          <Button variant="danger" onClick={() => setModalOpen(true)}>
+            تسليم الامتحان نهائياً
+          </Button>
+        )}
+      </div>
+
+      <SubmitExamModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onConfirm={doSubmit}
+        unansweredCount={unansweredCount}
+        submitting={submitting}
+      />
+    </div>
+  );
+}
+
+function SubmittedView({ exam, submission, questions, answers }) {
+  return (
+    <div className="mx-auto max-w-3xl space-y-5">
+      <ExamHeader exam={exam} />
+      <Card className="space-y-3 border-success/30 bg-success/5">
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-success/20 text-xl">✅</span>
+          <div>
+            <p className="font-display text-lg font-bold">تم تسليم هذا الامتحان نهائياً</p>
+            <p className="text-sm text-muted">
+              مسجل بتاريخ {formatDate(submission?.submitted_at)}
+              {submission?.grade_released
+                ? ` | درجتك: ${submission.score}`
+                : ' | الدرجة ستظهر بعد التصحيح.'}
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      <h2 className="font-display text-xl font-black">مراجعة إجاباتك</h2>
+      <div className="space-y-4">
+        {questions.map((q, i) => {
+          const myAnswer = answers ? answers[q.id] : null;
+          return (
+            <Card key={q.id} className="space-y-2">
+              <p className="font-display font-bold">
+                <span className="ml-2 text-signal">{i + 1}.</span>
+                {q.question_text}
+              </p>
+              <div className="rounded-lens bg-ink-900/60 px-3 py-2 text-sm">
+                <span className="ml-2 text-muted">إجابتك:</span>
+                {myAnswer ? (
+                  <span className="text-paper">{String(myAnswer)}</span>
+                ) : (
+                  <span className="text-danger">لم تجب</span>
+                )}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      <Link to="/student/exams">
+        <Button variant="secondary">الرجوع للائمتحانات</Button>
+      </Link>
+    </div>
+  );
+}
 
   if (!exam) {
     return (
