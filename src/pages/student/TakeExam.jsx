@@ -33,25 +33,40 @@ export default function TakeExam() {
   const [submitting, setSubmitting] = useState(false);
   const [preparing, setPreparing] = useState(true);
 
-  // جلب الأسئلة (من غير الإجابات الصحيحة) — عشان المراجعة بعد التسليم كمان
-  useEffect(() => {
-    if (!examId || !exam) return;
-    let active = true;
+ // جلب الأسئلة بعد التأكد من تحميل بيانات الامتحان
+useEffect(() => {
+  if (!examId) return;
+  
+  let active = true;
+
+  // لا نطلب الأسئلة إلا إذا انتهى تحميل الامتحان وكان موجوداً
+  if (!loading && exam) {
     setPreparing(true);
-    fetchExamQuestionsForStudent(examId).then(({ data }) => {
-      if (!active) return;
-      setQuestions(data || []);
-      const init = {};
-      (data || []).forEach((q) => {
-        init[q.id] = q.type === 'short_answer' ? '' : null;
+    fetchExamQuestionsForStudent(examId)
+      .then((data) => {
+        if (!active) return;
+        setQuestions(data || []);
+        const init = {};
+        (data || []).forEach((q) => {
+          init[q.id] = q.type === 'short_answer' ? '' : null;
+        });
+        setAnswers(init);
       });
-      setAnswers(init);
-      setPreparing(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, [examId, exam]);
+      .catch((err) => {
+        console.error("Error fetching questions:", err);
+      });
+      .finally(() => {
+        if (active) setPreparing(false);
+      });
+  } else if (!loading && !exam) {
+    // إذا انتهى التحميل ولم يتم العثور على الامتحان
+    if (active) setPreparing(false);
+  }
+
+  return () => {
+    active = false;
+  };
+}, [examId, exam, loading]);
 
   const alreadySubmitted = Boolean(submission);
   const nowOpen = useMemo(() => {
