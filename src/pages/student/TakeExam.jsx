@@ -31,6 +31,7 @@ export default function TakeExam() {
   const [submitting, setSubmitting] = useState(false);
   const [preparing, setPreparing] = useState(true);
   const [questionsError, setQuestionsError] = useState(null);
+  const [retryKey, setRetryKey] = useState(0);
   const submittingRef = useRef(false);
   const answersRef = useRef(answers);
   answersRef.current = answers;
@@ -41,6 +42,15 @@ export default function TakeExam() {
     let active = true;
     setPreparing(true);
     setQuestionsError(null);
+
+    // مؤقت أمان: لو الطلب علّق 15 ثانية → نوقف اللودر ونظهر رسالة بدل الانتظار للأبد
+    const safetyTimer = setTimeout(() => {
+      if (!active) return;
+      console.error('[TakeExam] مهلة جلب الأسئلة انتهت (15 ثانية)');
+      setQuestionsError('استغرقت الأسئلة وقت طويل جداً — تأكد من اتصالك بالإنترنت وحاول مرة أخرى');
+      setPreparing(false);
+    }, 15000);
+
     fetchExamQuestionsForStudent(examId)
       .then(({ data, error }) => {
         if (!active) return;
@@ -61,12 +71,14 @@ export default function TakeExam() {
         setQuestionsError(err?.message || 'فشل تحميل الأسئلة');
       })
       .finally(() => {
+        clearTimeout(safetyTimer);
         if (active) setPreparing(false);
       });
     return () => {
       active = false;
+      clearTimeout(safetyTimer);
     };
-  }, [examId, exam]);
+  }, [examId, exam, retryKey]);
 
   const alreadySubmitted = Boolean(submission);
   const nowOpen = useMemo(() => {
@@ -141,9 +153,12 @@ export default function TakeExam() {
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-danger/15 text-2xl text-danger">⚠️</div>
         <p className="font-display text-lg font-bold">مش قادرين نحمّل أسئلة الامتحان</p>
         <p className="max-w-md text-sm text-muted">{questionsError}</p>
-        <Link to="/student/exams">
-          <Button variant="secondary">الرجوع للامتحانات</Button>
-        </Link>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <Button onClick={() => setRetryKey((k) => k + 1)}>إعادة المحاولة</Button>
+          <Link to="/student/exams">
+            <Button variant="secondary">الرجوع للامتحانات</Button>
+          </Link>
+        </div>
       </Card>
     );
   }
