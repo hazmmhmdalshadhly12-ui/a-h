@@ -35,26 +35,27 @@ export default function TakeExam() {
 
  // جلب الأسئلة بعد التأكد من تحميل بيانات الامتحان
 useEffect(() => {
-  if (!examId || !profile) return;
-  
+  if (!examId) return;
+
   let active = true;
 
-  // لا نطلب الأسئلة إلا إذا انتهى تحميل الامتحان وكان موجوداً
-  if (!loading && exam) {
+  // جلب الأسئلة مباشرة إذا كان الامتحان موجوداً
+  if (exam) {
     setPreparing(true);
     fetchExamQuestionsForStudent(examId)
       .then((data) => {
         if (!active) return;
         setQuestions(data || []);
+
         const init = {};
         (data || []).forEach((q) => {
           init[q.id] = q.type === 'short_answer' ? '' : null;
         });
         setAnswers(init);
-      });
+      })
       .catch((err) => {
         console.error("Error fetching questions:", err);
-      });
+      })
       .finally(() => {
         if (active) setPreparing(false);
       });
