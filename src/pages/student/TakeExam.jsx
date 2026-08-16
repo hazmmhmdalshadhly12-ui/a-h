@@ -35,7 +35,7 @@ export default function TakeExam() {
 
  // جلب الأسئلة بعد التأكد من تحميل بيانات الامتحان
 useEffect(() => {
-  if (!examId) return;
+  if (!examId || !profile) return;
   
   let active = true;
 
