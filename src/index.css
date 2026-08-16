@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-ink text-paper font-body antialiased;
+    direction: rtl;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-display;
+  }
+
+  ::selection {
+    @apply bg-signal text-ink;
+  }
+
+  /* حالة فوكس واضحة للتنقل بالكيبورد */
+  :focus-visible {
+    outline: 2px solid theme('colors.signal.DEFAULT');
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@layer components {
+  .container-site {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(120deg, #f5b741, #5eead4);
+  }
+
+  .bg-grid {
+    background-image:
+      linear-gradient(rgba(31, 45, 84, 0.35) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(31, 45, 84, 0.35) 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+
+  .focus-ring {
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+
+  .focus-ring:focus-visible {
+    box-shadow: 0 0 0 2px theme('colors.signal.DEFAULT');
+    outline: none;
+  }
+
+  .card-panel {
+    @apply rounded-lens border border-ink-600 bg-ink-800/80 backdrop-blur-sm;
+  }
+
+  .code-chip {
+    @apply inline-flex items-center gap-1 rounded-md border border-ink-500/60 bg-ink-900 px-2 py-0.5 font-mono text-xs text-stream;
+  }
+
+  .input-base {
+    @apply focus-ring w-full rounded-lens border border-ink-600 bg-ink-900/70 px-4 py-2.5 text-paper placeholder:text-muted/60;
+  }
+}
+
+@layer utilities {
+  .animate-dot-flash {
+    animation: dot-flash 1.4s ease-in-out infinite;
+  }
+}
+
+/* سكرول بار مخصص */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #070b16;
+}
+::-webkit-scrollbar-thumb {
+  background: #1f2d54;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2a3a66;
+}
