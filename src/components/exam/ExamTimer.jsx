@@ -1,45 +1,36 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
+import { formatCountdown } from '../../utils/formatTime.js';
 
-export default function ExamTimer({ seconds, onExpire }) {
-  const [timeLeft, setTimeLeft] = useState(seconds);
-  const onExpireRef = useRef(onExpire);
-
-  useEffect(() => {
-    onExpireRef.current = onExpire;
-  }, [onExpire]);
+/** تايمر اختياري — بيكمل عد من المدة اللي اتبعتت، وبينادي onExpire لما يخلص */
+export default function ExamTimer({ seconds, onExpire, running = true }) {
+  const [left, setLeft] = useState(seconds);
 
   useEffect(() => {
-    if (!seconds || seconds <= 0) return;
-
-    setTimeLeft(seconds);
-
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          if (onExpireRef.current) {
-            onExpireRef.current();
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
+    setLeft(seconds);
   }, [seconds]);
 
-  const formatTime = (totalSec) => {
-    if (isNaN(totalSec) || totalSec < 0) return '00:00';
-    const m = Math.floor(totalSec / 60);
-    const s = totalSec % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
+  useEffect(() => {
+    if (!running) return;
+    if (left <= 0) {
+      onExpire?.();
+      return;
+    }
+    const t = setTimeout(() => setLeft((v) => v - 1), 1000);
+    return () => clearTimeout(t);
+  }, [left, running, onExpire]);
+
+  const urgent = left <= 60;
 
   return (
-    <div className="inline-flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-1 text-sm font-bold text-red-400 border border-red-500/20">
-      <span>⏱️ المتبقي:</span>
-      <span className="font-mono">{formatTime(timeLeft)}</span>
+    <div
+      className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 font-mono text-lg font-bold ${
+        urgent ? 'border-danger/50 bg-danger/15 text-danger' : 'border-stream/40 bg-stream/10 text-stream'
+      }`}
+      aria-live="polite"
+      aria-label="الوقت المتبقي"
+    >
+      <span className="h-2 w-2 animate-pulse rounded-full bg-current" />
+      {formatCountdown(left)}
     </div>
   );
 }
