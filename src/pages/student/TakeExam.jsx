@@ -111,6 +111,17 @@ useEffect(() => {
 
   // ===== شاشات الحالات =====
   if (loading) return <VisionLoader />;
+  
+return (
+  <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg m-4 z-50 relative">
+    <h3 className="font-bold mb-2">DEBUG INFO:</h3>
+    <p>1. Exam ID: <b>{String(examId)}</b></p>
+    <p>2. Profile Status: <b>{profile ? 'Logged In' : 'NULL'}</b></p>
+    <p>3. Loading Status: <b>{loading ? 'True' : 'False'}</b></p>
+    <p>4. Exam Object: <b>{exam ? 'Found' : 'NULL'}</b></p>
+    <p>5. Preparing Status: <b>{preparing ? 'True' : 'False'}</b></p>
+  </div>
+);
 
   if (!exam) {
     return (
