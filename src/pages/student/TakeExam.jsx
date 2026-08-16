@@ -30,6 +30,7 @@ export default function TakeExam() {
   const [modalOpen, setModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [preparing, setPreparing] = useState(true);
+  const [questionsError, setQuestionsError] = useState(null);
   const submittingRef = useRef(false);
   const answersRef = useRef(answers);
   answersRef.current = answers;
@@ -39,16 +40,29 @@ export default function TakeExam() {
     if (!examId || !exam) return;
     let active = true;
     setPreparing(true);
-    fetchExamQuestionsForStudent(examId).then(({ data }) => {
-      if (!active) return;
-      setQuestions(data || []);
-      const init = {};
-      (data || []).forEach((q) => {
-        init[q.id] = q.type === 'short_answer' ? '' : null;
+    setQuestionsError(null);
+    fetchExamQuestionsForStudent(examId)
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          setQuestionsError(error.message || 'فشل تحميل الأسئلة');
+          return;
+        }
+        setQuestions(data || []);
+        const init = {};
+        (data || []).forEach((q) => {
+          init[q.id] = q.type === 'short_answer' ? '' : null;
+        });
+        setAnswers(init);
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.error('[TakeExam] جلب الأسئلة فشل:', err);
+        setQuestionsError(err?.message || 'فشل تحميل الأسئلة');
+      })
+      .finally(() => {
+        if (active) setPreparing(false);
       });
-      setAnswers(init);
-      setPreparing(false);
-    });
     return () => {
       active = false;
     };
@@ -120,6 +134,20 @@ export default function TakeExam() {
     return <SubmittedView exam={exam} submission={submission} questions={questions} answers={submission?.answers || {}} />;
   }
 
+  // فشل تحميل الأسئلة
+  if (questionsError) {
+    return (
+      <Card className="flex flex-col items-center gap-4 py-14 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-danger/15 text-2xl text-danger">⚠️</div>
+        <p className="font-display text-lg font-bold">مش قادرين نحمّل أسئلة الامتحان</p>
+        <p className="max-w-md text-sm text-muted">{questionsError}</p>
+        <Link to="/student/exams">
+          <Button variant="secondary">الرجوع للامتحانات</Button>
+        </Link>
+      </Card>
+    );
+  }
+
   // مش في النافذة الزمنية
   if (!nowOpen) {
     return (
@@ -138,8 +166,22 @@ export default function TakeExam() {
     );
   }
 
-  if (preparing || questions.length === 0) {
+  if (preparing) {
     return <VisionLoader message="جاري تجهيز الامتحان..." />;
+  }
+
+  // الامتحان مفيش فيه أسئلة خالص
+  if (questions.length === 0) {
+    return (
+      <Card className="flex flex-col items-center gap-4 py-14 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-warning/15 text-2xl text-warning">📝</div>
+        <p className="font-display text-lg font-bold">الامتحان مفيش فيه أسئلة لسه</p>
+        <p className="max-w-md text-sm text-muted">رجّع نفسك للمستر، أو راجع صفحة الامتحانات.</p>
+        <Link to="/student/exams">
+          <Button variant="secondary">الرجوع للامتحانات</Button>
+        </Link>
+      </Card>
+    );
   }
 
   const question = questions[current];
