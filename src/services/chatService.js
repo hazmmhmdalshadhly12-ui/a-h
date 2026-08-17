@@ -25,7 +25,11 @@ export async function sendMessage(conversationId, senderId, body) {
     .single();
 }
 
-/** تعليم كل رسائل محادثة كمقروءة (للمستقبل + الأدمن) */
+/** حذف رسالة — صاحب الرسالة (الطالب) أو الأدمن */
+export async function deleteMessage(messageId) {
+  if (!messageId) return { data: null, error: { message: 'بيانات ناقصة' } };
+  return supabase.from('messages').delete().eq('id', messageId);
+}
 export async function markConversationRead(conversationId) {
   if (!conversationId) return { data: null, error: null };
   return supabase
