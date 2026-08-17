@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { cookieStorage, COOKIE_PREFIX } from './cookieStorage.js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -12,7 +13,10 @@ export const supabase = createClient(
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true
+      detectSessionInUrl: true,
+      // الجلسة (الـ Token) بتتحفظ في الكوكيز بدل localStorage
+      storage: cookieStorage,
+      storageKey: COOKIE_PREFIX
     }
   }
 );
