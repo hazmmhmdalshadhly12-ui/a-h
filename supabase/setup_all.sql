@@ -1,6 +1,6 @@
 ﻿-- ============================================================
 -- setup_all.sql — التشغيل الكامل للمشروع في مرة واحدة
--- دمج: 11 migrations + seed. شغّل الملف كله مرة واحدة في SQL Editor.
+-- دمج: 15 migrations + seed. شغّل الملف كله مرة واحدة في SQL Editor.
 -- ============================================================
 
 -- ====================================================================
@@ -210,14 +210,20 @@ create index exam_submissions_student_idx on public.exam_submissions (student_id
 
 -- ============================================================
 -- 006_bookings.sql
--- حجوزات الحصص — بيتأكد/بيترفض يدوياً من الأدمن
+-- الاشتراك الشهري — بيتأكد/بيترفض يدوياً من الأدمن
 -- ============================================================
 
 create table public.bookings (
   id uuid primary key default gen_random_uuid(),
   student_id uuid not null references public.profiles(id) on delete cascade,
-  requested_datetime timestamptz not null,
-  subject text not null default 'cs',
+  requested_datetime timestamptz,
+  subject text default 'cs',
+  full_name text not null default '',
+  phone text not null default '',
+  parent_phone text,
+  grade text not null default 'first_secondary'
+    check (grade in ('first_secondary', 'second_secondary')),
+  month text,
   status text not null default 'pending'
     check (status in ('pending', 'confirmed', 'rejected')),
   notes text,
@@ -723,11 +729,11 @@ begin
     insert into public.notifications (student_id, title, body)
     values (
       new.student_id,
-      'تحديث حالة الحجز',
+      'تحديث حالة الاشتراك',
       case new.status
-        when 'confirmed' then 'تم تأكيد حجزك بنجاح — مستنيك في الحصة 🎉'
-        when 'rejected' then 'نأسف، تم رفض حجزك — تواصل معنا لترتيب ميعاد تاني.'
-        else 'حجزك قيد المراجعة حالياً.'
+        when 'confirmed' then 'تم تأكيد اشتراكك الشهري بنجاح 🎉'
+        when 'rejected' then 'نأسف، تم رفض اشتراكك — تواصل معنا لمعرفة التفاصيل.'
+        else 'اشتراكك قيد المراجعة حالياً.'
       end
     );
   end if;
@@ -762,6 +768,566 @@ drop trigger if exists exams_published_notify on public.exams;
 create trigger exams_published_notify
   after update on public.exams
   for each row execute procedure public.notify_exam_published();
+
+
+-- ====================================================================
+-- ==== 012_security_fixes.sql ====
+-- ====================================================================
+
+-- ============================================================
+-- 012_security_fixes.sql
+-- إصلاحات أمنية (تقرير فحص الثغرات):
+--   1) منع تسريب auto_score / manual_score قبل نشر الدرجة
+--   2) فرض مدة الامتحان على السيرفر (duration_minutes)
+--   3) منع الطالب من تغيير email في جدول profiles
+-- ============================================================
+
+create or replace function public.get_my_submission(p_exam_id uuid)
+returns table (
+  id uuid,
+  exam_id uuid,
+  answers jsonb,
+  auto_score numeric,
+  manual_score numeric,
+  score numeric,
+  grade_released boolean,
+  submitted_at timestamptz
+)
+language plpgsql security definer set search_path = public
+as $$
+begin
+  return query
+    select s.id, s.exam_id, s.answers,
+           case when s.grade_released then s.auto_score else null end as auto_score,
+           case when s.grade_released then s.manual_score else null end as manual_score,
+           case when s.grade_released then s.score else null end as score,
+           s.grade_released, s.submitted_at
+    from public.exam_submissions s
+    where s.student_id = auth.uid() and s.exam_id = p_exam_id
+    limit 1;
+end;
+$$;
+
+create or replace function public.submit_exam(p_exam_id uuid, p_answers jsonb)
+returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_exam public.exams%rowtype;
+  v_question record;
+  v_answer text;
+  v_auto numeric := 0;
+  v_submission_id uuid;
+  v_deadline timestamptz;
+begin
+  if v_student_id is null then
+    raise exception 'يجب تسجيل الدخول أولاً';
+  end if;
+
+  if not public.is_student() then
+    raise exception 'غير مسموح للطالب الحالي بتسليم الامتحانات';
+  end if;
+
+  select * into v_exam from public.exams where id = p_exam_id;
+  if not found then
+    raise exception 'الامتحان غير موجود';
+  end if;
+
+  if not v_exam.is_published then
+    raise exception 'هذا الامتحان غير منشور';
+  end if;
+
+  if v_exam.grade is distinct from (select grade from public.profiles where id = v_student_id) then
+    raise exception 'هذا الامتحان ليس لصفك';
+  end if;
+
+  if v_exam.start_at is not null and now() < v_exam.start_at then
+    raise exception 'لم يبدأ وقت الامتحان بعد';
+  end if;
+
+  if v_exam.end_at is not null and now() > v_exam.end_at then
+    raise exception 'انتهى وقت الامتحان';
+  end if;
+
+  -- فرض المدة على السيرفر
+  if v_exam.duration_minutes is not null
+     and v_exam.duration_minutes > 0
+     and v_exam.start_at is not null then
+    v_deadline := v_exam.start_at + (v_exam.duration_minutes || ' minutes')::interval;
+    if now() > v_deadline then
+      raise exception 'انتهى وقت الامتحان';
+    end if;
+  end if;
+
+  for v_question in
+    select * from public.exam_questions q
+    where q.exam_id = p_exam_id
+  loop
+    v_answer := p_answers ->> v_question.id::text;
+    if v_question.type <> 'short_answer'
+       and v_answer is not null
+       and v_answer = v_question.correct_answer then
+      v_auto := v_auto + coalesce(v_question.points, 0);
+    end if;
+  end loop;
+
+  insert into public.exam_submissions (exam_id, student_id, answers, auto_score, score)
+  values (p_exam_id, v_student_id, p_answers, v_auto, v_auto)
+  on conflict (exam_id, student_id) do nothing
+  returning id into v_submission_id;
+
+  if v_submission_id is null then
+    raise exception 'محاولة واحدة فقط لكل امتحان — تم تسليم هذا الامتحان مسبقاً';
+  end if;
+
+  insert into public.notifications (student_id, title, body)
+  values (
+    v_student_id,
+    'تم تسليم الامتحان',
+    coalesce((select title from public.exams where id = p_exam_id), 'الامتحان') || ' — اتستلمت إجاباتك، والنتيجة هتظهر بعد مراجعة المستر.'
+  );
+
+  return jsonb_build_object('submission_id', v_submission_id, 'auto_score', v_auto);
+end;
+$$;
+
+create or replace function public.prevent_profile_escalation()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if not public.is_admin()
+     and (new.role is distinct from old.role
+          or new.grade is distinct from old.grade
+          or new.email is distinct from old.email) then
+    raise exception 'غير مسموح بتغيير الصلاحية أو الصف الدراسي أو البريد';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_role_guard on public.profiles;
+create trigger profiles_role_guard
+  before update on public.profiles
+  for each row execute procedure public.prevent_profile_escalation();
+
+
+-- ====================================================================
+-- ==== 013_monthly_booking.sql ====
+-- ====================================================================
+
+-- ============================================================
+-- 013_monthly_booking.sql
+-- تحويل الحجز من "حجز حصة" إلى "حجز شهري"
+-- ============================================================
+
+alter table public.bookings
+  add column if not exists full_name text not null default '',
+  add column if not exists phone text not null default '',
+  add column if not exists parent_phone text,
+  add column if not exists grade text not null default 'first_secondary'
+    check (grade in ('first_secondary', 'second_secondary')),
+  add column if not exists month text;
+
+alter table public.bookings
+  alter column requested_datetime drop not null;
+
+alter table public.bookings
+  alter column subject drop not null;
+
+
+-- ====================================================================
+-- ==== 014_harden_functions.sql ====
+-- ====================================================================
+
+-- ============================================================
+-- 014_harden_functions.sql
+-- تحصين دوال الامتحانات ضد تسريب معلومات قاعدة البيانات:
+-- أي استثناء غير متوقع بيتحوّل لرسالة عامة من غير تفاصيل داخلية.
+-- ============================================================
+
+create or replace function public.get_exam_questions(p_exam_id uuid)
+returns table (
+  id uuid,
+  exam_id uuid,
+  question_text text,
+  type text,
+  options jsonb,
+  points int,
+  order_index int
+)
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_grade text;
+begin
+  if v_student_id is null then
+    raise exception 'يجب تسجيل الدخول';
+  end if;
+
+  select grade into v_grade from public.profiles where id = v_student_id;
+
+  if not exists (
+    select 1 from public.exams e
+    where e.id = p_exam_id
+      and e.is_published = true
+      and e.grade = v_grade
+  ) and not exists (
+    select 1 from public.exam_submissions s
+    where s.exam_id = p_exam_id and s.student_id = v_student_id
+  ) then
+    raise exception 'غير مصرح بقراءة أسئلة هذا الامتحان';
+  end if;
+
+  return query
+    select q.id, q.exam_id, q.question_text, q.type, q.options, q.points, q.order_index
+    from public.exam_questions q
+    where q.exam_id = p_exam_id
+    order by q.order_index asc;
+exception
+  when others then
+    raise exception 'تعذر تحميل أسئلة الامتحان حالياً، حاول مرة أخرى';
+end;
+$$;
+
+create or replace function public.submit_exam(p_exam_id uuid, p_answers jsonb)
+returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_exam public.exams%rowtype;
+  v_question record;
+  v_answer text;
+  v_auto numeric := 0;
+  v_submission_id uuid;
+  v_deadline timestamptz;
+begin
+  if v_student_id is null then
+    raise exception 'يجب تسجيل الدخول أولاً';
+  end if;
+
+  if not public.is_student() then
+    raise exception 'غير مسموح للطالب الحالي بتسليم الامتحانات';
+  end if;
+
+  select * into v_exam from public.exams where id = p_exam_id;
+  if not found then
+    raise exception 'الامتحان غير موجود';
+  end if;
+
+  if not v_exam.is_published then
+    raise exception 'هذا الامتحان غير منشور';
+  end if;
+
+  if v_exam.grade is distinct from (select grade from public.profiles where id = v_student_id) then
+    raise exception 'هذا الامتحان ليس لصفك';
+  end if;
+
+  if v_exam.start_at is not null and now() < v_exam.start_at then
+    raise exception 'لم يبدأ وقت الامتحان بعد';
+  end if;
+
+  if v_exam.end_at is not null and now() > v_exam.end_at then
+    raise exception 'انتهى وقت الامتحان';
+  end if;
+
+  if v_exam.duration_minutes is not null
+     and v_exam.duration_minutes > 0
+     and v_exam.start_at is not null then
+    v_deadline := v_exam.start_at + (v_exam.duration_minutes || ' minutes')::interval;
+    if now() > v_deadline then
+      raise exception 'انتهى وقت الامتحان';
+    end if;
+  end if;
+
+  for v_question in
+    select * from public.exam_questions q
+    where q.exam_id = p_exam_id
+  loop
+    v_answer := p_answers ->> v_question.id::text;
+    if v_question.type <> 'short_answer'
+       and v_answer is not null
+       and v_answer = v_question.correct_answer then
+      v_auto := v_auto + coalesce(v_question.points, 0);
+    end if;
+  end loop;
+
+  insert into public.exam_submissions (exam_id, student_id, answers, auto_score, score)
+  values (p_exam_id, v_student_id, p_answers, v_auto, v_auto)
+  on conflict (exam_id, student_id) do nothing
+  returning id into v_submission_id;
+
+  if v_submission_id is null then
+    raise exception 'محاولة واحدة فقط لكل امتحان — تم تسليم هذا الامتحان مسبقاً';
+  end if;
+
+  insert into public.notifications (student_id, title, body)
+  values (
+    v_student_id,
+    'تم تسليم الامتحان',
+    coalesce((select title from public.exams where id = p_exam_id), 'الامتحان') || ' — اتستلمت إجاباتك، والنتيجة هتظهر بعد مراجعة المستر.'
+  );
+
+  return jsonb_build_object('submission_id', v_submission_id, 'auto_score', v_auto);
+exception
+  when unique_violation then
+    raise exception 'محاولة واحدة فقط لكل امتحان — تم تسليم هذا الامتحان مسبقاً';
+  when others then
+    raise exception 'تعذر تسليم الامتحان حالياً، حاول مرة أخرى';
+end;
+$$;
+
+create or replace function public.get_my_submissions()
+returns table (
+  exam_id uuid,
+  submitted_at timestamptz,
+  grade_released boolean,
+  score numeric
+)
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'يجب تسجيل الدخول';
+  end if;
+
+  return query
+    select s.exam_id, s.submitted_at, s.grade_released,
+           case when s.grade_released then s.score else null end as score
+    from public.exam_submissions s
+    where s.student_id = auth.uid();
+exception
+  when others then
+    raise exception 'تعذر جلب بيانات تسليماتك حالياً، حاول مرة أخرى';
+end;
+$$;
+
+create or replace function public.get_my_submission(p_exam_id uuid)
+returns table (
+  id uuid,
+  exam_id uuid,
+  answers jsonb,
+  auto_score numeric,
+  manual_score numeric,
+  score numeric,
+  grade_released boolean,
+  submitted_at timestamptz
+)
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'يجب تسجيل الدخول';
+  end if;
+
+  return query
+    select s.id, s.exam_id, s.answers,
+           case when s.grade_released then s.auto_score else null end as auto_score,
+           case when s.grade_released then s.manual_score else null end as manual_score,
+           case when s.grade_released then s.score else null end as score,
+           s.grade_released, s.submitted_at
+    from public.exam_submissions s
+    where s.student_id = auth.uid() and s.exam_id = p_exam_id
+    limit 1;
+exception
+  when others then
+    raise exception 'تعذر جلب بيانات تسليمك حالياً، حاول مرة أخرى';
+end;
+$$;
+
+
+-- ====================================================================
+-- ==== 015_chat.sql ====
+-- ====================================================================
+
+-- ============================================================
+-- 015_chat.sql
+-- نظام الشات بين الطالب والمعلم (المستر/الأدمن)
+-- ============================================================
+
+create table public.conversations (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references public.profiles(id) on delete cascade,
+  teacher_id uuid not null references public.profiles(id) on delete cascade,
+  last_message_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  unique (student_id)
+);
+
+create table public.messages (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.conversations(id) on delete cascade,
+  sender_id uuid not null references public.profiles(id) on delete cascade,
+  body text not null check (length(btrim(body)) > 0),
+  is_read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index messages_conversation_idx on public.messages (conversation_id, created_at asc);
+create index conversations_teacher_idx on public.conversations (teacher_id, last_message_at desc);
+
+alter table public.conversations enable row level security;
+alter table public.messages enable row level security;
+
+grant select, insert on public.conversations to authenticated;
+grant select, insert, update on public.messages to authenticated;
+
+create policy "conversations: own or admin"
+  on public.conversations for select to authenticated
+  using (student_id = auth.uid() or public.is_admin());
+
+create policy "conversations: student creates own"
+  on public.conversations for insert to authenticated
+  with check (
+    public.is_student()
+    and student_id = auth.uid()
+    and teacher_id in (select id from public.profiles where role = 'admin')
+  );
+
+create policy "messages: read own conversation or admin"
+  on public.messages for select to authenticated
+  using (
+    public.is_admin()
+    or exists (
+      select 1 from public.conversations c
+      where c.id = conversation_id and c.student_id = auth.uid()
+    )
+  );
+
+create policy "messages: send in own conversation or admin"
+  on public.messages for insert to authenticated
+  with check (
+    sender_id = auth.uid()
+    and exists (
+      select 1 from public.conversations c
+      where c.id = conversation_id
+        and (c.student_id = auth.uid() or public.is_admin())
+    )
+  );
+
+create policy "messages: mark read in own conversation or admin"
+  on public.messages for update to authenticated
+  using (
+    public.is_admin()
+    or exists (
+      select 1 from public.conversations c
+      where c.id = conversation_id and c.student_id = auth.uid()
+    )
+  )
+  with check (
+    public.is_admin()
+    or exists (
+      select 1 from public.conversations c
+      where c.id = conversation_id and c.student_id = auth.uid()
+    )
+  );
+
+create or replace function public.messages_guard_update()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.body is distinct from old.body
+     or new.sender_id is distinct from old.sender_id
+     or new.conversation_id is distinct from old.conversation_id
+     or new.id is distinct from old.id then
+    raise exception 'غير مسموح بتعديل الرسائل';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists messages_guard_update on public.messages;
+create trigger messages_guard_update
+  before update on public.messages
+  for each row execute procedure public.messages_guard_update();
+
+create or replace function public.touch_conversation()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  update public.conversations
+  set last_message_at = now()
+  where id = new.conversation_id;
+  return new;
+end;
+$$;
+
+drop trigger if exists messages_touch_conversation on public.messages;
+create trigger messages_touch_conversation
+  after insert on public.messages
+  for each row execute procedure public.touch_conversation();
+
+create or replace function public.notify_chat_message()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_teacher uuid;
+  v_student uuid;
+begin
+  select c.teacher_id, c.student_id into v_teacher, v_student
+  from public.conversations c where c.id = new.conversation_id;
+
+  if new.sender_id = v_student then
+    insert into public.notifications (student_id, title, body)
+    values (v_teacher, 'رسالة جديدة من طالب', 'وصلتك رسالة جديدة من طالب في الشات.');
+  end if;
+
+  if new.sender_id = v_teacher then
+    insert into public.notifications (student_id, title, body)
+    values (v_student, 'رسالة جديدة من المعلم', 'رد عليك المعلم في الشات.');
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists messages_notify_chat on public.messages;
+create trigger messages_notify_chat
+  after insert on public.messages
+  for each row execute procedure public.notify_chat_message();
+
+create or replace function public.get_or_create_conversation()
+returns uuid
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_teacher uuid;
+  v_conv uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'يجب تسجيل الدخول';
+  end if;
+
+  select id into v_teacher from public.profiles where role = 'admin' order by created_at asc limit 1;
+  if v_teacher is null then
+    raise exception 'لم يتم تحديد معلم بعد';
+  end if;
+
+  select id into v_conv from public.conversations where student_id = auth.uid();
+  if v_conv is not null then
+    return v_conv;
+  end if;
+
+  insert into public.conversations (student_id, teacher_id)
+  values (auth.uid(), v_teacher)
+  on conflict (student_id) do nothing
+  returning id into v_conv;
+
+  if v_conv is null then
+    select id into v_conv from public.conversations where student_id = auth.uid();
+  end if;
+
+  return v_conv;
+end;
+$$;
+
+grant execute on function public.get_or_create_conversation() to authenticated;
 
 
 -- ====================================================================

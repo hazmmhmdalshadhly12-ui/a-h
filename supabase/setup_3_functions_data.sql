@@ -73,7 +73,7 @@
  grant execute on function public.get_my_submission(uuid) to authenticated;
  grant execute on function public.publish_grade(uuid) to authenticated;
  grant execute on function public.publish_exam_grades(uuid) to authenticated;
- create or replace function public.notify_booking_status() returns trigger language plpgsql security definer set search_path = public as $$ begin if new.status is distinct from old.status then insert into public.notifications (student_id, title, body) values ( new.student_id, 'تحديث حالة الحجز', case new.status when 'confirmed' then 'تم تأكيد حجزك بنجاح — مستنيك في الحصة 🎉' when 'rejected' then 'نأسف، تم رفض حجزك — تواصل معنا لترتيب ميعاد تاني.' else 'حجزك قيد المراجعة حالياً.' end );
+ create or replace function public.notify_booking_status() returns trigger language plpgsql security definer set search_path = public as $$ begin if new.status is distinct from old.status then insert into public.notifications (student_id, title, body) values ( new.student_id, 'تحديث حالة الاشتراك', case new.status when 'confirmed' then 'تم تأكيد اشتراكك الشهري بنجاح 🎉' when 'rejected' then 'نأسف، تم رفض اشتراكك — تواصل معنا لمعرفة التفاصيل.' else 'اشتراكك قيد المراجعة حالياً.' end );
  end if;
  return new;
  end;

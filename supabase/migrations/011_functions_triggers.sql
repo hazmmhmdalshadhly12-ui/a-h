@@ -156,7 +156,8 @@ $$;
 
 -- =================================================================
 -- 4) get_my_submission — تسليم الطالب في امتحان معين
---    الدرجة مش بتتسرب قبل النشر
+--    كل الدرجات (auto/manual/score) متسربش قبل النشر
+--    (إصلاح: auto_score و manual_score كانوا بيرجعوا فوراً قبل النشر)
 -- =================================================================
 create or replace function public.get_my_submission(p_exam_id uuid)
 returns table (
@@ -173,7 +174,9 @@ language plpgsql security definer set search_path = public
 as $$
 begin
   return query
-    select s.id, s.exam_id, s.answers, s.auto_score, s.manual_score,
+    select s.id, s.exam_id, s.answers,
+           case when s.grade_released then s.auto_score else null end as auto_score,
+           case when s.grade_released then s.manual_score else null end as manual_score,
            case when s.grade_released then s.score else null end as score,
            s.grade_released, s.submitted_at
     from public.exam_submissions s
@@ -272,11 +275,11 @@ begin
     insert into public.notifications (student_id, title, body)
     values (
       new.student_id,
-      'تحديث حالة الحجز',
+      'تحديث حالة الاشتراك',
       case new.status
-        when 'confirmed' then 'تم تأكيد حجزك بنجاح — مستنيك في الحصة 🎉'
-        when 'rejected' then 'نأسف، تم رفض حجزك — تواصل معنا لترتيب ميعاد تاني.'
-        else 'حجزك قيد المراجعة حالياً.'
+        when 'confirmed' then 'تم تأكيد اشتراكك الشهري بنجاح 🎉'
+        when 'rejected' then 'نأسف، تم رفض اشتراكك — تواصل معنا لمعرفة التفاصيل.'
+        else 'اشتراكك قيد المراجعة حالياً.'
       end
     );
   end if;
