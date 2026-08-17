@@ -24,6 +24,7 @@ export default function Bookings() {
   const { profile } = useAuth();
   const { bookings, loading, reload, requestBooking } = useBookings();
   const toast = useToast();
+  const isProfessional = profile?.grade === 'professional';
 
   const [form, setForm] = useState({
     full_name: profile?.full_name || '',
@@ -38,7 +39,7 @@ export default function Bookings() {
   const [submitting, setSubmitting] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
 
-  // المبلغ حسب الصف: أولى = 150، ثانية = 250
+  // المبلغ حسب الصف: أولى = 150، ثانية = 250 (الاحترافي بيشترك من جوه الكورس)
   const amount = PAYMENT_INFO.amounts[form.grade] || PAYMENT_INFO.amounts.first_secondary;
   const instagram = PAYMENT_INFO.instagramNumber;
 
@@ -58,7 +59,6 @@ export default function Bookings() {
     e.preventDefault();
     if (!validate()) return;
 
-    // لو لسه مظهروش رسالة الدفع → نظهرها الأول (رسالة مبالغ التحويل)
     if (!showPayment) {
       setShowPayment(true);
       return;
@@ -89,89 +89,17 @@ export default function Bookings() {
       <div>
         <h1 className="font-display text-2xl font-black">الحجوزات</h1>
         <p className="mt-1 text-sm text-muted">
-          سجّل اشتراكك الشهري وانتظر تأكيد المستر — الحالة بتتحدث تلقائياً.
+          {isProfessional
+            ? 'الكورس الاحترافي بيشترك من جوه صفحة الكورس — هنا بتشوف سجل حجوزاتك.'
+            : 'سجّل اشتراكك الشهري وانتظر تأكيد المستر — الحالة بتتحدث تلقائياً.'}
         </p>
       </div>
 
-      <Card className="space-y-4">
-        <h2 className="font-display text-lg font-bold">حجز شهر جديد</h2>
-        <p className="rounded-lens bg-ink-800 px-3 py-2 text-xs text-muted">
-          بياناتك دي بتتسجل في الحجز لتأكيد هويتك — راجعها قبل الإرسال.
-        </p>
+      {!isProfessional && (
+        <Card className="space-y-4">
+          <h2 className="font-display text-lg font-bold">حجز شهر جديد</h2>
 
-        <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
-          <Input
-            name="full_name"
-            label="الاسم الكامل *"
-            value={form.full_name}
-            onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-            error={errors.full_name}
-            required
-          />
-          <Input
-            name="phone"
-            label="رقم موبايل الطالب *"
-            dir="ltr"
-            placeholder="01xxxxxxxxx"
-            value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            error={errors.phone}
-            required
-          />
-          <Input
-            name="parent_phone"
-            label="رقم ولي الأمر *"
-            dir="ltr"
-            placeholder="01xxxxxxxxx"
-            value={form.parent_phone}
-            onChange={(e) => setForm({ ...form, parent_phone: e.target.value })}
-            error={errors.parent_phone}
-            required
-          />
-          <Select
-            name="grade"
-            label="الصف الدراسي *"
-            value={form.grade}
-            onChange={(e) => setForm({ ...form, grade: e.target.value })}
-            options={GRADES_OPTIONS}
-            required
-          />
-          <Input
-            name="month"
-            label="شهر الحجز *"
-            type="month"
-            value={form.month}
-            onChange={(e) => setForm({ ...form, month: e.target.value })}
-            error={errors.month}
-            required
-          />
-          <Input
-            name="transfer_number"
-            label="الرقم اللي حولت منه *"
-            dir="ltr"
-            placeholder="01xxxxxxxxx"
-            value={form.transfer_number}
-            onChange={(e) => setForm({ ...form, transfer_number: e.target.value })}
-            error={errors.transfer_number}
-            required
-          />
-          <Textarea
-            name="notes"
-            label="ملاحظات (اختياري)"
-            rows={2}
-            placeholder="مثال: مفضل الحضور يوم السبت"
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-          />
-          <div className="sm:col-span-2">
-            <Button type="submit" loading={submitting}>
-              {showPayment ? 'إتمام الطلب' : 'إرسال طلب الحجز'}
-            </Button>
-          </div>
-        </form>
-
-        {/* رسالة الدفع — بتظهر بعد إرسال الطلب */}
-        {showPayment && (
+          {/* رقم التحويل أول حاجة — علشان الطالب يعرف يحول منين */}
           <div className="rounded-lens border border-signal/40 bg-signal/10 p-4">
             <h3 className="font-display text-base font-black text-paper">رسالة الدفع 💳</h3>
             <ul className="mt-2 list-inside list-disc space-y-1.5 text-sm leading-relaxed text-paper/90">
@@ -179,12 +107,88 @@ export default function Bookings() {
               <li>على رقم الإنستجرام: <b dir="ltr" className="font-mono">{instagram}</b></li>
               <li>محفظة كاش غير متوفر الآن — التحويل يكون من رقم مضمون بإسمك</li>
             </ul>
-            <p className="mt-3 text-xs text-muted">
+          </div>
+
+          <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Input
+                name="transfer_number"
+                label="الرقم اللي حولت منه *"
+                dir="ltr"
+                placeholder="01xxxxxxxxx"
+                value={form.transfer_number}
+                onChange={(e) => setForm({ ...form, transfer_number: e.target.value })}
+                error={errors.transfer_number}
+                required
+              />
+            </div>
+            <Input
+              name="full_name"
+              label="الاسم الكامل *"
+              value={form.full_name}
+              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+              error={errors.full_name}
+              required
+            />
+            <Input
+              name="phone"
+              label="رقم موبايل الطالب *"
+              dir="ltr"
+              placeholder="01xxxxxxxxx"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              error={errors.phone}
+              required
+            />
+            <Input
+              name="parent_phone"
+              label="رقم ولي الأمر *"
+              dir="ltr"
+              placeholder="01xxxxxxxxx"
+              value={form.parent_phone}
+              onChange={(e) => setForm({ ...form, parent_phone: e.target.value })}
+              error={errors.parent_phone}
+              required
+            />
+            <Select
+              name="grade"
+              label="الصف الدراسي *"
+              value={form.grade}
+              onChange={(e) => setForm({ ...form, grade: e.target.value })}
+              options={GRADES_OPTIONS}
+              required
+            />
+            <Input
+              name="month"
+              label="شهر الحجز *"
+              type="month"
+              value={form.month}
+              onChange={(e) => setForm({ ...form, month: e.target.value })}
+              error={errors.month}
+              required
+            />
+            <Textarea
+              name="notes"
+              label="ملاحظات (اختياري)"
+              rows={2}
+              placeholder="مثال: مفضل الحضور يوم السبت"
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
+            <div className="sm:col-span-2">
+              <Button type="submit" loading={submitting}>
+                {showPayment ? 'إتمام الطلب' : 'إرسال طلب الحجز'}
+              </Button>
+            </div>
+          </form>
+
+          {showPayment && (
+            <p className="text-xs text-muted">
               بعد التحويل اضغط "إتمام الطلب" وانتظر المستر يؤكد اشتراكك — هتفضل الكورسات والامتحانات مقفولة لحد التأكيد.
             </p>
-          </div>
-        )}
-      </Card>
+          )}
+        </Card>
+      )}
 
       <div>
         <h2 className="mb-3 font-display text-lg font-bold">حجوزاتي</h2>

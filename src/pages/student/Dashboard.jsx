@@ -19,6 +19,7 @@ export default function Dashboard() {
   const { exams, loading: examsLoading } = useExams();
   const { bookings, loading: bookingsLoading } = useBookings();
   const { unreadCount } = useNotifications();
+  const isProfessional = profile?.grade === 'professional';
 
   const availableExams = exams.filter((e) => !e.submitted).length;
   const submittedExams = exams.filter((e) => e.submitted).length;
@@ -27,8 +28,8 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* تنبيه الاشتراك — لو مش مفعّل */}
-      {!accessLoading && !confirmed && (
+      {/* تنبيه الاشتراك — لو مش مفعّل (مش للاحترافي: بيشترك في كورسات فردية) */}
+      {!accessLoading && !confirmed && !isProfessional && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lens border border-warning/40 bg-warning/10 px-4 py-3">
           <div className="flex items-center gap-3">
             <span className="text-xl">🔒</span>
@@ -39,6 +40,20 @@ export default function Dashboard() {
           </div>
           <Link to="/student/bookings">
             <Button size="sm">احجز الآن</Button>
+          </Link>
+        </div>
+      )}
+      {!accessLoading && !confirmed && isProfessional && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lens border border-stream/40 bg-stream/10 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-xl">⭐</span>
+            <div>
+              <p className="text-sm font-bold text-paper">الكورس الاحترافي — اشترك في كورساتك</p>
+              <p className="text-xs text-muted">اختر أي كورس احترافي من صفحة الكورسات، حوّل المبلغ وانتظر تأكيد المستر.</p>
+            </div>
+          </div>
+          <Link to="/student/courses">
+            <Button size="sm">تصفح الكورسات</Button>
           </Link>
         </div>
       )}
@@ -109,7 +124,11 @@ export default function Dashboard() {
             <Skeleton className="h-14" />
           ) : lastBooking ? (
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-paper">📅 حجز شهر: {formatMonth(lastBooking.month)}</p>
+              {lastBooking.grade === 'professional' ? (
+                <p className="text-sm font-semibold text-paper">⭐ {lastBooking.notes || 'اشتراك في كورس احترافي'}</p>
+              ) : (
+                <p className="text-sm font-semibold text-paper">📅 حجز شهر: {formatMonth(lastBooking.month)}</p>
+              )}
               <Badge color={BOOKING_STATUSES[lastBooking.status]?.color || 'muted'}>
                 {BOOKING_STATUSES[lastBooking.status]?.label || lastBooking.status}
               </Badge>

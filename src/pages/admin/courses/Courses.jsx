@@ -41,6 +41,12 @@ export default function Courses() {
     { key: 'title', label: 'العنوان', render: (c) => <span className="font-semibold text-paper">{c.title}</span> },
     { key: 'grade', label: 'الصف', render: (c) => <Badge color="muted">{GRADES[c.grade] || c.grade}</Badge> },
     {
+      key: 'price',
+      label: 'السعر',
+      render: (c) =>
+        c.price != null ? <span className="font-bold text-signal">{c.price} جنيه</span> : <span className="text-muted">—</span>
+    },
+    {
       key: 'section',
       label: 'القسم',
       render: (c) => (c.section ? <Badge color="stream">{c.section.title}</Badge> : <span className="text-muted">بدون</span>)

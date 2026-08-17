@@ -26,22 +26,38 @@ import {
   deleteHomeworkQuestion,
   fetchSubmissions
 } from '../../../services/homeworkService.js';
+import {
+  fetchCourseFiles,
+  addCourseFile,
+  deleteCourseFile,
+  uploadCourseFile
+} from '../../../services/courseService.js';
+import {
+  fetchCourseComments,
+  deleteCourseComment,
+  togglePinComment
+} from '../../../services/courseService.js';
+import { useAuth } from '../../../hooks/useAuth.js';
 import { HOMEWORK_QUESTION_TYPE_OPTIONS } from '../../../config/constants.js';
 import { getFriendlyError } from '../../../utils/errors.js';
 import { cn } from '../../../lib/utils.js';
+import { formatDateTime } from '../../../utils/formatDate.js';
 
-/** إدارة محتويات الكورس: المحاضرات + الواجبات + أسئلة كل واجب */
+/** إدارة محتويات الكورس: المحاضرات + الواجبات + الملفات + التعليقات */
 export default function CourseManager() {
   const { courseId } = useParams();
+  const { profile } = useAuth();
   const toast = useToast();
 
   const [lessons, setLessons] = useState([]);
   const [homeworks, setHomeworks] = useState([]);
+  const [files, setFiles] = useState([]);
+  const [comments, setComments] = useState([]);
   const [tab, setTab] = useState('lessons');
   const [loading, setLoading] = useState(true);
 
   // فورم محاضرة
-  const [lessonForm, setLessonForm] = useState({ title: '', video_url: '', order_index: 1 });
+  const [lessonForm, setLessonForm] = useState({ title: '', video_url: '', content: '', order_index: 1 });
   const [editingLesson, setEditingLesson] = useState(null);
   const [lessonSubmitting, setLessonSubmitting] = useState(false);
 
@@ -58,10 +74,22 @@ export default function CourseManager() {
   const [qSubmitting, setQSubmitting] = useState(false);
   const [submissions, setSubmissions] = useState([]);
 
+  // ملفات
+  const [fileForm, setFileForm] = useState({ title: '' });
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [fileSubmitting, setFileSubmitting] = useState(false);
+
   const load = async () => {
-    const [l, h] = await Promise.all([fetchLessons(courseId), fetchHomeworks(courseId)]);
+    const [l, h, f, c] = await Promise.all([
+      fetchLessons(courseId),
+      fetchHomeworks(courseId),
+      fetchCourseFiles(courseId),
+      fetchCourseComments(courseId)
+    ]);
     setLessons(l.data || []);
     setHomeworks(h.data || []);
+    setFiles(f.data || []);
+    setComments(c.data || []);
     setLoading(false);
   };
 
@@ -86,6 +114,7 @@ export default function CourseManager() {
     const payload = {
       title: lessonForm.title.trim(),
       video_url: lessonForm.video_url || null,
+      content: lessonForm.content || null,
       order_index: Number(lessonForm.order_index) || 1
     };
     const { error } = editingLesson
@@ -95,13 +124,13 @@ export default function CourseManager() {
     if (error) return toast.error(getFriendlyError(error, 'فشل الحفظ'));
     toast.success(editingLesson ? 'تم تحديث المحاضرة' : 'تمت إضافة المحاضرة');
     setEditingLesson(null);
-    setLessonForm({ title: '', video_url: '', order_index: 1 });
+    setLessonForm({ title: '', video_url: '', content: '', order_index: 1 });
     load();
   };
 
   const startEditLesson = (l) => {
     setEditingLesson(l);
-    setLessonForm({ title: l.title || '', video_url: l.video_url || '', order_index: l.order_index || 1 });
+    setLessonForm({ title: l.title || '', video_url: l.video_url || '', content: l.content || '', order_index: l.order_index || 1 });
   };
 
   const removeLesson = async (id) => {
@@ -198,6 +227,56 @@ export default function CourseManager() {
     loadQuestions(activeHw);
   };
 
+  // ===== الملفات =====
+  const submitFile = async (e) => {
+    e.preventDefault();
+    if (!fileForm.title.trim()) return toast.error('اكتب اسم الملف');
+    if (!selectedFile) return toast.error('اختر ملف PDF أو ZIP الأول');
+    setFileSubmitting(true);
+
+    const { data: upload, error: upErr } = await uploadCourseFile(selectedFile, { courseId, studentId: profile?.id });
+    if (upErr) {
+      setFileSubmitting(false);
+      return toast.error(getFriendlyError(upErr, 'فشل رفع الملف — جرب ملف أصغر أو راجع الصلاحيات'));
+    }
+
+    const { error } = await addCourseFile(courseId, {
+      title: fileForm.title.trim(),
+      fileUrl: upload.fileUrl,
+      fileType: upload.fileType
+    });
+    setFileSubmitting(false);
+    if (error) return toast.error(getFriendlyError(error, 'فشل الحفظ'));
+    toast.success('تم رفع الملف');
+    setFileForm({ title: '' });
+    setSelectedFile(null);
+    load();
+  };
+
+  const removeFile = async (id) => {
+    if (!window.confirm('حذف هذا الملف؟')) return;
+    const { error } = await deleteCourseFile(id);
+    if (error) return toast.error('فشل الحذف');
+    toast.success('تم الحذف');
+    load();
+  };
+
+  // ===== التعليقات =====
+  const handleDeleteComment = async (id) => {
+    if (!window.confirm('حذف هذا التعليق؟')) return;
+    const { error } = await deleteCourseComment(id);
+    if (error) return toast.error(getFriendlyError(error, 'فشل الحذف'));
+    toast.success('تم حذف التعليق');
+    load();
+  };
+
+  const handlePinComment = async (id) => {
+    const { error } = await togglePinComment(id);
+    if (error) return toast.error(getFriendlyError(error, 'فشل التحديث'));
+    toast.success('تم التحديث');
+    load();
+  };
+
   const renderOptionsHint = (q) => {
     if (q.type === 'true_false') {
       return <span className="text-xs text-muted">الإجابة الصحيحة: {q.correct_answer === 'true' ? 'صح ✓' : q.correct_answer === 'false' ? 'غلط ✗' : q.correct_answer || '—'}</span>;
@@ -210,11 +289,18 @@ export default function CourseManager() {
     );
   };
 
+  const tabs = [
+    { key: 'lessons', label: `المحاضرات (${lessons.length})` },
+    { key: 'homeworks', label: `الواجبات (${homeworks.length})` },
+    { key: 'files', label: `الملفات (${files.length})` },
+    { key: 'comments', label: `التعليقات (${comments.length})` }
+  ];
+
   return (
     <div className="space-y-6">
       <AdminHeader
         title="إدارة محتوى الدرس"
-        subtitle="المحاضرات اللي الطالب يشوفها + الواجبات اللي يحلها ويسلمها"
+        subtitle="المحاضرات + الواجبات + الملفات (PDF/ZIP) + التعليقات"
         actions={
           <Link to="/admin/courses">
             <Button size="sm" variant="secondary">
@@ -225,25 +311,19 @@ export default function CourseManager() {
       />
 
       {/* تبويبات */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => setTab('lessons')}
-          className={cn(
-            'focus-ring rounded-lens px-4 py-2 text-sm font-bold transition',
-            tab === 'lessons' ? 'bg-signal text-ink' : 'bg-ink-800 text-muted hover:text-paper'
-          )}
-        >
-          المحاضرات ({lessons.length})
-        </button>
-        <button
-          onClick={() => setTab('homeworks')}
-          className={cn(
-            'focus-ring rounded-lens px-4 py-2 text-sm font-bold transition',
-            tab === 'homeworks' ? 'bg-signal text-ink' : 'bg-ink-800 text-muted hover:text-paper'
-          )}
-        >
-          الواجبات ({homeworks.length})
-        </button>
+      <div className="flex flex-wrap gap-2">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={cn(
+              'focus-ring rounded-lens px-4 py-2 text-sm font-bold transition',
+              tab === t.key ? 'bg-signal text-ink' : 'bg-ink-800 text-muted hover:text-paper'
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {loading ? (
@@ -252,36 +332,44 @@ export default function CourseManager() {
         <div className="space-y-5">
           <Card>
             <h2 className="mb-4 font-display text-lg font-bold">{editingLesson ? 'تعديل محاضرة' : 'إضافة محاضرة'}</h2>
-            <form onSubmit={submitLesson} className="grid gap-4 sm:grid-cols-2">
-              <Input
-                name="title"
-                label="عنوان المحاضرة *"
-                value={lessonForm.title}
-                onChange={(e) => setLessonForm({ ...lessonForm, title: e.target.value })}
-                required
-              />
-              <Input
-                name="order_index"
-                label="الترتيب"
-                type="number"
-                min="1"
-                value={lessonForm.order_index}
-                onChange={(e) => setLessonForm({ ...lessonForm, order_index: e.target.value })}
-              />
-              <div className="sm:col-span-2">
+            <form onSubmit={submitLesson} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Input
-                  name="video_url"
-                  label="رابط الفيديو (YouTube embed)"
-                  placeholder="https://www.youtube.com/embed/..."
-                  dir="ltr"
-                  value={lessonForm.video_url}
-                  onChange={(e) => setLessonForm({ ...lessonForm, video_url: e.target.value })}
+                  name="title"
+                  label="عنوان المحاضرة *"
+                  value={lessonForm.title}
+                  onChange={(e) => setLessonForm({ ...lessonForm, title: e.target.value })}
+                  required
+                />
+                <Input
+                  name="order_index"
+                  label="الترتيب"
+                  type="number"
+                  min="1"
+                  value={lessonForm.order_index}
+                  onChange={(e) => setLessonForm({ ...lessonForm, order_index: e.target.value })}
                 />
               </div>
+              <Input
+                name="video_url"
+                label="رابط الفيديو (YouTube embed)"
+                placeholder="https://www.youtube.com/embed/..."
+                dir="ltr"
+                value={lessonForm.video_url}
+                onChange={(e) => setLessonForm({ ...lessonForm, video_url: e.target.value })}
+              />
+              <Textarea
+                name="content"
+                label="نص المحاضرة (الشرح المكتوب)"
+                rows={5}
+                placeholder="اكتب شرح المحاضرة هنا — هيتظهر للطالب تحت الفيديو."
+                value={lessonForm.content}
+                onChange={(e) => setLessonForm({ ...lessonForm, content: e.target.value })}
+              />
               <div className="flex items-end gap-2">
                 <Button type="submit" loading={lessonSubmitting}>{editingLesson ? 'حفظ' : 'إضافة المحاضرة'}</Button>
                 {editingLesson && (
-                  <Button type="button" variant="secondary" onClick={() => { setEditingLesson(null); setLessonForm({ title: '', video_url: '', order_index: 1 }); }}>
+                  <Button type="button" variant="secondary" onClick={() => { setEditingLesson(null); setLessonForm({ title: '', video_url: '', content: '', order_index: 1 }); }}>
                     إلغاء
                   </Button>
                 )}
@@ -301,7 +389,10 @@ export default function CourseManager() {
                         <span className="font-mono text-muted">#{l.order_index} </span>
                         {l.title}
                       </p>
-                      <p className="truncate text-xs text-muted" dir="ltr">{l.video_url || 'بدون فيديو'}</p>
+                      <p className="truncate text-xs text-muted">
+                        {l.video_url ? 'فيديو ✓' : 'بدون فيديو'}
+                        {l.content ? ' • نص ✓' : ''}
+                      </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                       <Button size="sm" variant="secondary" onClick={() => startEditLesson(l)}>
@@ -317,6 +408,96 @@ export default function CourseManager() {
             </Card>
           )}
         </div>
+      ) : tab === 'files' ? (
+        <div className="space-y-5">
+          <Card>
+            <h2 className="mb-4 font-display text-lg font-bold">رفع ملف (PDF أو ZIP)</h2>
+            <form onSubmit={submitFile} className="space-y-4">
+              <Input
+                name="title"
+                label="اسم الملف (اللي الطالب هيشوفه) *"
+                placeholder="مثال: ملخص الفصل الأول PDF"
+                value={fileForm.title}
+                onChange={(e) => setFileForm({ ...fileForm, title: e.target.value })}
+                required
+              />
+              <input
+                type="file"
+                accept=".pdf,.zip"
+                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                className="focus-ring block w-full rounded-lens border border-ink-600 bg-ink-900 px-3 py-2 text-sm text-paper file:mr-3 file:rounded-lens file:border-0 file:bg-signal/15 file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-signal"
+              />
+              <Button type="submit" loading={fileSubmitting}>رفع الملف</Button>
+            </form>
+          </Card>
+
+          {files.length === 0 ? (
+            <Card className="text-center text-muted">لا توجد ملفات في هذا الدرس بعد.</Card>
+          ) : (
+            <Card>
+              <h3 className="mb-3 font-display text-sm font-bold text-paper">الملفات ({files.length})</h3>
+              <ul className="divide-y divide-ink-700/60">
+                {files.map((f) => (
+                  <li key={f.file_id} className="flex items-center justify-between gap-3 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-paper">
+                        <Badge color={f.file_type === 'pdf' ? 'danger' : f.file_type === 'zip' ? 'warning' : 'muted'}>
+                          {f.file_type === 'pdf' ? 'PDF' : f.file_type === 'zip' ? 'ZIP' : 'ملف'}
+                        </Badge>{' '}
+                        {f.title}
+                      </p>
+                      <p className="text-xs text-muted">
+                        رفعه: {f.uploader_name || '—'} • {formatDateTime(f.created_at)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <a href={f.file_url} target="_blank" rel="noreferrer" download>
+                        <Button size="sm" variant="secondary">
+                          <Icon name="download" className="h-3.5 w-3.5" />
+                        </Button>
+                      </a>
+                      <Button size="sm" variant="danger" onClick={() => removeFile(f.file_id)}>
+                        <Icon name="trash" className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+        </div>
+      ) : tab === 'comments' ? (
+        <Card>
+          <h3 className="mb-4 font-display text-lg font-bold">
+            تعليقات الطلاب ({comments.length}) — <span className="text-xs font-normal text-muted">تثبّت المهم وامسح أي تعليق</span>
+          </h3>
+          {comments.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted">لا توجد تعليقات بعد.</p>
+          ) : (
+            <ul className="divide-y divide-ink-700/60">
+              {comments.map((c) => (
+                <li key={c.comment_id} className="flex items-start justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-2 text-xs text-muted">
+                      <span className="font-semibold text-paper">{c.student_name || 'طالب'}</span>
+                      {c.is_pinned && <Badge color="warning">📌 مثبّت</Badge>}
+                      <span>{formatDateTime(c.created_at)}</span>
+                    </p>
+                    <p className="mt-1 text-sm leading-relaxed text-paper">{c.body}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Button size="sm" variant="secondary" onClick={() => handlePinComment(c.comment_id)}>
+                      {c.is_pinned ? 'فك تثبيت' : 'تثبيت'}
+                    </Button>
+                    <Button size="sm" variant="danger" onClick={() => handleDeleteComment(c.comment_id)}>
+                      <Icon name="trash" className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       ) : (
         <div className="space-y-5">
           <Card>

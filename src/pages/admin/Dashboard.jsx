@@ -78,7 +78,9 @@ export default function Dashboard() {
                 <li key={b.id} className="flex items-center justify-between gap-3 py-3">
                   <div>
                     <p className="text-sm font-semibold text-paper">{b.full_name || b.profiles?.full_name || '—'}</p>
-                    <p className="text-xs text-muted">{formatMonth(b.month)}</p>
+                    <p className="text-xs text-muted">
+                      {b.grade === 'professional' ? (b.notes || '⭐ كورس احترافي') : formatMonth(b.month)}
+                    </p>
                   </div>
                   <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
                     b.status === 'pending' ? 'bg-warning/15 text-warning' :

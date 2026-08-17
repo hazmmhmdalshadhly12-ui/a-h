@@ -16,8 +16,10 @@ export default function Courses() {
     });
   }, []);
 
-  const firstGroup = courses.filter((c) => c.grade === 'first_secondary');
-  const secondGroup = courses.filter((c) => c.grade === 'second_secondary');
+  const groups = GRADES_OPTIONS.map((g) => ({
+    ...g,
+    list: courses.filter((c) => c.grade === g.value)
+  })).filter((g) => g.list.length > 0);
 
   return (
     <PublicLayout>
@@ -39,28 +41,19 @@ export default function Courses() {
           </div>
         ) : (
           <div className="space-y-12">
-            {GRADES_OPTIONS.map((grade) => {
-              const list = grade.value === 'first_secondary' ? firstGroup : secondGroup;
-              return (
-                <div key={grade.value}>
+            {groups.map((group) => (
+                <div key={group.value}>
                   <h2 className="mb-4 flex items-center gap-2 font-display text-xl font-bold text-paper">
                     <span className="h-2 w-2 rounded-full bg-signal" />
-                    {grade.label}
+                    {group.label}
                   </h2>
-                  {list.length === 0 ? (
-                    <p className="rounded-lens border border-dashed border-ink-500 py-8 text-center text-sm text-muted">
-                      لا توجد كورسات لهذا الصف حالياً
-                    </p>
-                  ) : (
-                    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                      {list.map((c) => (
-                        <CoursePreview key={c.id} course={c} />
-                      ))}
-                    </div>
-                  )}
+                  <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                    {group.list.map((c) => (
+                      <CoursePreview key={c.id} course={c} />
+                    ))}
+                  </div>
                 </div>
-              );
-            })}
+              ))}
           </div>
         )}
       </section>

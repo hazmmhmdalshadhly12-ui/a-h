@@ -10,11 +10,17 @@ export async function fetchLessons(courseId) {
     .order('order_index', { ascending: true });
 }
 
-export async function createLesson({ courseId, title, videoUrl, orderIndex }) {
+export async function createLesson({ courseId, title, video_url, content, order_index }) {
   if (!courseId) return { data: null, error: { message: 'بيانات ناقصة' } };
   return supabase
     .from('lessons')
-    .insert({ course_id: courseId, title, video_url: videoUrl || null, order_index: orderIndex || 1 })
+    .insert({
+      course_id: courseId,
+      title,
+      video_url: video_url || null,
+      content: content || null,
+      order_index: order_index || 1
+    })
     .select()
     .single();
 }

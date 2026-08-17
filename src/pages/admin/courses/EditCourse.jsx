@@ -7,20 +7,17 @@ import Button from '../../../components/ui/Button.jsx';
 import Icon from '../../../components/ui/Icon.jsx';
 import { useToast } from '../../../components/ui/Toast.jsx';
 import { fetchCourseById, updateCourse } from '../../../services/courseService.js';
-import { fetchSections } from '../../../services/sectionService.js';
 
 export default function EditCourse() {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
   const [course, setCourse] = useState(null);
-  const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchCourseById(courseId), fetchSections()]).then(([c, s]) => {
+    fetchCourseById(courseId).then((c) => {
       setCourse(c.data);
-      setSections(s.data || []);
       setLoading(false);
     });
   }, [courseId]);
@@ -53,7 +50,7 @@ export default function EditCourse() {
           </Link>
         }
       />
-      <CourseForm initial={course} onSubmit={handleSubmit} sections={sections} />
+      <CourseForm initial={course} onSubmit={handleSubmit} />
     </div>
   );
 }

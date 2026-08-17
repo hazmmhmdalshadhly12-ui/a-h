@@ -1,20 +1,13 @@
-import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminHeader from '../../../components/admin/AdminHeader.jsx';
 import CourseForm from '../../../components/admin/CourseForm.jsx';
 import { useToast } from '../../../components/ui/Toast.jsx';
 import { createCourse } from '../../../services/courseService.js';
-import { fetchSections } from '../../../services/sectionService.js';
 import { getFriendlyError } from '../../../utils/errors.js';
 
 export default function CreateCourse() {
   const navigate = useNavigate();
   const toast = useToast();
-  const [sections, setSections] = useState([]);
-
-  useEffect(() => {
-    fetchSections().then(({ data }) => setSections(data || []));
-  }, []);
 
   const handleSubmit = async (payload) => {
     const { error } = await createCourse(payload);
@@ -26,7 +19,7 @@ export default function CreateCourse() {
   return (
     <div className="mx-auto max-w-3xl">
       <AdminHeader title="درس جديد" />
-      <CourseForm onSubmit={handleSubmit} sections={sections} />
+      <CourseForm onSubmit={handleSubmit} />
     </div>
   );
 }

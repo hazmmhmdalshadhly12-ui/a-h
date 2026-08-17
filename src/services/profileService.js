@@ -23,3 +23,20 @@ export async function fetchStudentById(userId) {
 export async function updateStudentRole(userId, role) {
   return supabase.from('profiles').update({ role }).eq('id', userId).select().single();
 }
+
+// ===== منح الوصول (فتح الشهور/الكورسات يدوياً — للأدمن) =====
+
+export async function fetchStudentAccess(studentId) {
+  if (!studentId) return { data: [], error: null };
+  return supabase.rpc('get_student_access', { p_student_id: studentId });
+}
+
+export async function addStudentMonthGrant(studentId, month) {
+  if (!studentId || !month) return { data: null, error: { message: 'بيانات ناقصة' } };
+  return supabase.rpc('add_student_month_grant', { p_student_id: studentId, p_month: month });
+}
+
+export async function removeStudentMonthGrant(grantId) {
+  if (!grantId) return { data: null, error: { message: 'بيانات ناقصة' } };
+  return supabase.rpc('remove_student_month_grant', { p_grant_id: grantId });
+}

@@ -5,8 +5,8 @@ export async function fetchBookingsForStudent(studentId) {
   return supabase.from('bookings').select('*').eq('student_id', studentId).order('created_at', { ascending: false });
 }
 
-/** حجز شهري — الاسم + موبايل الطالب + ولي الأمر + الصف + الشهر المطلوب */
-export async function createBooking({ studentId, fullName, phone, parentPhone, grade, month, notes, transferNumber }) {
+/** حجز شهري أو احترافي (course_id) — الاسم + موبايل الطالب + ولي الأمر + الصف + الشهر/الكورس */
+export async function createBooking({ studentId, fullName, phone, parentPhone, grade, month, courseId, notes, transferNumber }) {
   return supabase
     .from('bookings')
     .insert({
@@ -16,6 +16,7 @@ export async function createBooking({ studentId, fullName, phone, parentPhone, g
       parent_phone: parentPhone || null,
       grade: grade || 'first_secondary',
       month: month || null,
+      course_id: courseId || null,
       notes: notes || null,
       transfer_number: transferNumber || null
     })
