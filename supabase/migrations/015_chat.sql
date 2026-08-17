@@ -38,7 +38,7 @@ alter table public.conversations enable row level security;
 alter table public.messages enable row level security;
 
 grant select, insert on public.conversations to authenticated;
-grant select, insert, update on public.messages to authenticated;
+grant select, insert, update, delete on public.messages to authenticated;
 
 -- المحادثة: الطالب صاحبها أو الأدمن
 create policy "conversations: own or admin"
@@ -91,6 +91,20 @@ create policy "messages: mark read in own conversation or admin"
     or exists (
       select 1 from public.conversations c
       where c.id = conversation_id and c.student_id = auth.uid()
+    )
+  );
+
+-- الحذف: الطالب يمسح رسالته هو بس، والأدمن يمسح أي رسالة
+create policy "messages: delete own or admin"
+  on public.messages for delete to authenticated
+  using (
+    public.is_admin()
+    or (
+      sender_id = auth.uid()
+      and exists (
+        select 1 from public.conversations c
+        where c.id = conversation_id and c.student_id = auth.uid()
+      )
     )
   );
 
