@@ -11,7 +11,7 @@ import { useToast } from '../../components/ui/Toast.jsx';
 export default function Chat() {
   const { profile } = useAuth();
   const toast = useToast();
-  const { messages, loading, sending, error, send } = useStudentChat();
+  const { messages, loading, sending, error, send, remove } = useStudentChat();
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -21,6 +21,11 @@ export default function Chat() {
   const handleSend = async (text) => {
     const { error: sendError } = await send(text);
     if (sendError) toast.error(getFriendlyError(sendError, 'فشل إرسال الرسالة، حاول مرة أخرى'));
+  };
+
+  const handleDelete = async (messageId) => {
+    const { error: delError } = await remove(messageId);
+    if (delError) toast.error(getFriendlyError(delError, 'فشل حذف الرسالة'));
   };
 
   return (
@@ -61,7 +66,13 @@ export default function Chat() {
             </div>
           ) : (
             messages.map((m) => (
-              <ChatBubble key={m.id} message={m} mine={m.sender_id === profile?.id} />
+              <ChatBubble
+                key={m.id}
+                message={m}
+                mine={m.sender_id === profile?.id}
+                deletable={m.sender_id === profile?.id}
+                onDelete={handleDelete}
+              />
             ))
           )}
 
