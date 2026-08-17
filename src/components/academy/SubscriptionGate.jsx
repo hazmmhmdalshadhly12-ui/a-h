@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
-import Card from './Card.jsx';
-import Button from './Button.jsx';
-import Icon from './Icon.jsx';
-import Skeleton from './Skeleton.jsx';
+import Card from '../ui/Card.jsx';
+import Button from '../ui/Button.jsx';
+import Icon from '../ui/Icon.jsx';
+import Skeleton from '../ui/Skeleton.jsx';
 import { useAccess } from '../../hooks/useAccess.js';
 
 /**
