@@ -6,6 +6,7 @@ import { GRADES } from '../../config/site.js';
 
 export default function BookingCard({ booking }) {
   const status = BOOKING_STATUSES[booking.status] || BOOKING_STATUSES.pending;
+  const isProfessional = booking.grade === 'professional';
   return (
     <Card className="flex flex-col gap-2.5">
       <div className="flex items-center justify-between gap-2">
@@ -14,17 +15,23 @@ export default function BookingCard({ booking }) {
           {new Date(booking.created_at || Date.now()).toLocaleDateString('ar-EG')}
         </span>
       </div>
-      <p className="flex items-center gap-2 text-sm font-semibold text-paper">
-        📅 حجز شهر: {formatMonth(booking.month)}
-      </p>
+      {booking.transfer_number && (
+        <p className="rounded-lens bg-ink-800 px-3 py-1.5 text-sm text-paper" dir="ltr">
+          🔄 رقم التحويل: <span className="font-mono font-bold">{booking.transfer_number}</span>
+        </p>
+      )}
+      {isProfessional ? (
+        <p className="text-sm font-semibold text-signal">⭐ {booking.notes || 'اشتراك في كورس احترافي'}</p>
+      ) : (
+        <p className="flex items-center gap-2 text-sm font-semibold text-paper">
+          📅 حجز شهر: {formatMonth(booking.month)}
+        </p>
+      )}
       <p className="text-sm text-muted">الصف: {GRADES[booking.grade] || booking.grade || '—'}</p>
       <p className="text-sm text-muted">الاسم: {booking.full_name || '—'}</p>
       <p className="text-sm text-muted" dir="ltr">موبايل: {booking.phone || '—'}</p>
-      {booking.transfer_number && (
-        <p className="text-sm text-muted" dir="ltr">رقم التحويل: {booking.transfer_number}</p>
-      )}
       {booking.parent_phone && <p className="text-sm text-muted" dir="ltr">ولي الأمر: {booking.parent_phone}</p>}
-      {booking.notes && <p className="text-sm text-muted">ملاحظات: {booking.notes}</p>}
+      {!isProfessional && booking.notes && <p className="text-sm text-muted">ملاحظات: {booking.notes}</p>}
     </Card>
   );
 }

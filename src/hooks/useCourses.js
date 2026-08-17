@@ -42,13 +42,28 @@ export function useCourses(grade) {
   return { courses, loading, error, reload: load };
 }
 
-export function useCourse(courseId) {
+export function useCourse(courseId, grade) {
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!courseId) return;
     let active = true;
+
+    // للكورس الاحترافي: بيجيب الكورس كامل مع السعر وحالة accessibility حتى لو مش مشترك
+    if (grade === 'professional') {
+      fetchStudentCourses(grade).then(({ data }) => {
+        if (active) {
+          const found = Array.isArray(data) ? data.find((c) => (c.course_id || c.id) === courseId) : null;
+          setCourse(found || null);
+          setLoading(false);
+        }
+      });
+      return () => {
+        active = false;
+      };
+    }
+
     fetchCourseById(courseId).then(({ data }) => {
       if (active) {
         setCourse(data);
@@ -58,7 +73,7 @@ export function useCourse(courseId) {
     return () => {
       active = false;
     };
-  }, [courseId]);
+  }, [courseId, grade]);
 
   return { course, loading };
 }

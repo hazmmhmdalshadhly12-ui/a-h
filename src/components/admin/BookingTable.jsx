@@ -25,8 +25,13 @@ export default function BookingTable({ bookings, onUpdateStatus }) {
     },
     {
       key: 'month',
-      label: 'شهر الحجز',
-      render: (b) => <span className="text-paper/90">{formatMonth(b.month)}</span>
+      label: 'شهر الحجز / الكورس',
+      render: (b) =>
+        b.grade === 'professional' ? (
+          <span className="text-sm font-semibold text-signal">⭐ {b.notes || 'كورس احترافي'}</span>
+        ) : (
+          <span className="text-paper/90">{formatMonth(b.month)}</span>
+        )
     },
     {
       key: 'transfer',

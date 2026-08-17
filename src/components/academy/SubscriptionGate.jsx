@@ -4,13 +4,19 @@ import Button from '../ui/Button.jsx';
 import Icon from '../ui/Icon.jsx';
 import Skeleton from '../ui/Skeleton.jsx';
 import { useAccess } from '../../hooks/useAccess.js';
+import { useAuth } from '../../hooks/useAuth.js';
 
 /**
  * حاجز المحتوى التعليمي: لو الطالب معندهوش حجز مؤكد،
  * بيشوف رسالة "احجز أولاً" بدل المحتوى — الشات والحجز بيظلوا شغالين.
+ *
+ * الكورس الاحترافي بيشتغل بنظام تاني: الطالب يشترك في كورسات فردية،
+ * فبيشوف الكورسات بالسعر وبيقدر يبدأ الاشتراك من غير "حجز شهري" إجباري.
  */
 export default function SubscriptionGate({ children }) {
+  const { profile } = useAuth();
   const { confirmed, loading } = useAccess();
+  const isProfessional = profile?.grade === 'professional';
 
   if (loading) {
     return (
@@ -19,6 +25,11 @@ export default function SubscriptionGate({ children }) {
         <Skeleton className="h-56" />
       </div>
     );
+  }
+
+  // الاحترافي: مفيش حاجز عام — كل كورس بيقفل/يفتح لوحده (اشترك في الكورس)
+  if (isProfessional) {
+    return children;
   }
 
   if (!confirmed) {

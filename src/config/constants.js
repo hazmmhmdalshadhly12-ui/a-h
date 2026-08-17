@@ -1,6 +1,7 @@
 export const GRADES_OPTIONS = [
   { value: 'first_secondary', label: 'الصف الأول الثانوي', short: 'أولى ثانوي' },
-  { value: 'second_secondary', label: 'الصف الثاني الثانوي', short: 'ثانية ثانوي' }
+  { value: 'second_secondary', label: 'الصف الثاني الثانوي', short: 'ثانية ثانوي' },
+  { value: 'professional', label: 'الكورس الاحترافي', short: 'الكورس الاحترافي' }
 ];
 
 export const QUESTION_TYPES = {

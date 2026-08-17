@@ -17,9 +17,13 @@ export default function CoursePreview({ course }) {
       <h3 className="font-display text-lg font-bold text-paper">{course.title}</h3>
       <p className="text-sm leading-relaxed text-muted line-clamp-3">{course.description}</p>
 
+      {course.grade === 'professional' && course.price != null && (
+        <p className="text-sm font-bold text-signal">💰 {course.price} جنيه</p>
+      )}
+
       <div className="mt-auto flex items-center gap-2 rounded-lens border border-ink-600 bg-ink-900/60 px-3 py-2 text-xs text-muted">
         <Icon name="eye" className="h-4 w-4 text-signal" />
-        متاح للطلاب بعد تسجيل الدخول
+        {course.grade === 'professional' ? 'اشترك في الكورس من لوحة الطالب' : 'متاح للطلاب بعد تسجيل الدخول'}
       </div>
     </Card>
   );

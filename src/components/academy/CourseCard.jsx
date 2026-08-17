@@ -5,13 +5,14 @@ import Icon from '../ui/Icon.jsx';
 import { GRADE_SHORT } from '../../config/site.js';
 
 export default function CourseCard({ course, locked = false }) {
-  const { id, course_id, title, description, grade, image_url, order_index, section, section_title, accessible } = course || {};
+  const { id, course_id, title, description, grade, image_url, order_index, section, section_title, accessible, price } = course || {};
   const courseId = id || course_id;
   const isLocked = locked || accessible === false;
+  const isProfessional = grade === 'professional';
 
   if (isLocked) {
     return (
-      <Card className="flex h-full flex-col gap-3 opacity-80">
+      <Card className="flex h-full flex-col gap-3 opacity-90">
         <div className="flex items-start justify-between gap-2">
           <div className="flex h-11 w-11 items-center justify-center rounded-lens bg-ink-800 text-muted">
             <Icon name="lock" className="h-5 w-5" />
@@ -22,9 +23,18 @@ export default function CourseCard({ course, locked = false }) {
           <h3 className="font-display text-lg font-bold text-muted">{title}</h3>
           {description && <p className="mt-1.5 text-sm leading-relaxed text-muted line-clamp-3">{description}</p>}
         </div>
-        <div className="mt-auto flex items-center justify-between pt-2">
+        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           <span className="font-mono text-xs text-muted">#{String(order_index || 1).padStart(2, '0')}</span>
-          <span className="text-xs font-semibold text-muted">متاح بعد تجديد اشتراكك</span>
+          {isProfessional && price != null ? (
+            <Link
+              to={`/student/courses/${courseId}`}
+              className="focus-ring inline-flex items-center gap-1 rounded-full bg-signal/15 px-3 py-1.5 text-sm font-bold text-signal hover:bg-signal/25"
+            >
+              <Icon name="lock" className="h-3.5 w-3.5" /> اشترك — {price} جنيه
+            </Link>
+          ) : (
+            <span className="text-xs font-semibold text-muted">متاح بعد تجديد اشتراكك</span>
+          )}
         </div>
       </Card>
     );
@@ -48,6 +58,9 @@ export default function CourseCard({ course, locked = false }) {
       <div>
         <h3 className="font-display text-lg font-bold text-paper">{title}</h3>
         {description && <p className="mt-1.5 text-sm leading-relaxed text-muted line-clamp-3">{description}</p>}
+        {isProfessional && price != null && (
+          <p className="mt-2 text-sm font-bold text-signal">💰 {price} جنيه</p>
+        )}
       </div>
 
       <div className="mt-auto flex items-center justify-between pt-2">

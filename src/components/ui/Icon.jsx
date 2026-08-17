@@ -39,7 +39,9 @@ const PATHS = {
   lock: <path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 1 1 6 0v3H9z" />,
   layers: <path d="M12 2 2 7l10 5 10-5-10-5zM2 12l10 5 10-5M2 17l10 5 10-5" />,
   info: <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zm0-10v4m0-8h.01" />,
-  external: <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" />
+  external: <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" />,
+  download: <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />,
+  pin: <path d="M9 4h6l-1 7 3 3v2H7v-2l3-3-1-7zM12 16v5" />
 };
 
 export default function Icon({ name, className = 'h-5 w-5', strokeWidth = 1.8 }) {

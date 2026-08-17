@@ -14,12 +14,14 @@ export const SITE = {
 
 export const GRADES = {
   first_secondary: 'الصف الأول الثانوي',
-  second_secondary: 'الصف الثاني الثانوي'
+  second_secondary: 'الصف الثاني الثانوي',
+  professional: 'الكورس الاحترافي'
 };
 
 export const GRADE_SHORT = {
   first_secondary: 'أولى ثانوي',
-  second_secondary: 'ثانية ثانوي'
+  second_secondary: 'ثانية ثانوي',
+  professional: 'الكورس الاحترافي'
 };
 
 export const SUBJECTS = {
