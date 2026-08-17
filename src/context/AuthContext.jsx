@@ -3,6 +3,7 @@ import { useToast } from '../components/ui/Toast.jsx';
 import { getSession, onAuthStateChange, signOut as doSignOut } from '../lib/auth.js';
 import { fetchProfile } from '../services/profileService.js';
 import { supabase } from '../lib/supabaseClient.js';
+import { migrateLegacySession } from '../lib/cookieStorage.js';
 
 const AuthContext = createContext(null);
 
@@ -40,6 +41,8 @@ export function AuthProvider({ children }) {
     // نستنى الـ profile يكمل تحميله قبل ما نوقف الـ loading
     // عشان الروتور ميشوفش profile=null ويعمل redirect لـ /403 (ممنوع الوصول) بالخطأ
     const finishAuth = async () => {
+      // نقل الجلسة القديمة (لو موجودة) من localStorage للكوكيز مرة واحدة
+      migrateLegacySession();
       const { data } = await getSession();
       if (!active) return;
       setSession(data.session);
