@@ -14,6 +14,7 @@ import StudentLayout from '../pages/student/StudentLayout.jsx';
 import Dashboard from '../pages/student/Dashboard.jsx';
 import MyCourses from '../pages/student/MyCourses.jsx';
 import CourseDetails from '../pages/student/CourseDetails.jsx';
+import HomeworkTake from '../pages/student/HomeworkTake.jsx';
 import Exams from '../pages/student/Exams.jsx';
 import TakeExam from '../pages/student/TakeExam.jsx';
 import Grades from '../pages/student/Grades.jsx';
@@ -34,6 +35,8 @@ import ExamResults from '../pages/admin/exams/ExamResults.jsx';
 import AdminCourses from '../pages/admin/courses/Courses.jsx';
 import CreateCourse from '../pages/admin/courses/CreateCourse.jsx';
 import EditCourse from '../pages/admin/courses/EditCourse.jsx';
+import CourseManager from '../pages/admin/courses/CourseManager.jsx';
+import AdminSections from '../pages/admin/sections/Sections.jsx';
 import AdminBookings from '../pages/admin/bookings/Bookings.jsx';
 import AdminCompetitions from '../pages/admin/competitions/Competitions.jsx';
 import CreateCompetition from '../pages/admin/competitions/CreateCompetition.jsx';
@@ -72,6 +75,7 @@ export default function AppRoutes() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="courses" element={<MyCourses />} />
         <Route path="courses/:courseId" element={<CourseDetails />} />
+        <Route path="courses/:courseId/homework/:homeworkId" element={<HomeworkTake />} />
         <Route path="exams" element={<Exams />} />
         <Route path="exams/:examId" element={<TakeExam />} />
         <Route path="grades" element={<Grades />} />
@@ -101,6 +105,8 @@ export default function AppRoutes() {
         <Route path="courses" element={<AdminCourses />} />
         <Route path="courses/new" element={<CreateCourse />} />
         <Route path="courses/:courseId" element={<EditCourse />} />
+        <Route path="courses/:courseId/manage" element={<CourseManager />} />
+        <Route path="sections" element={<AdminSections />} />
         <Route path="bookings" element={<AdminBookings />} />
         <Route path="competitions" element={<AdminCompetitions />} />
         <Route path="competitions/new" element={<CreateCompetition />} />

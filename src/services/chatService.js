@@ -5,6 +5,12 @@ export async function getOrCreateConversation() {
   return supabase.rpc('get_or_create_conversation');
 }
 
+/** للأدمن: فتح محادثة مع طالب معين مباشرة (مش شرط الطالب يبدأ) */
+export async function getOrCreateConversationWithStudent(studentId) {
+  if (!studentId) return { data: null, error: { message: 'حدد الطالب أولاً' } };
+  return supabase.rpc('get_or_create_conversation_with', { p_student_id: studentId });
+}
+
 /** رسائل محادثة معينة */
 export async function fetchMessages(conversationId) {
   if (!conversationId) return { data: [], error: null };

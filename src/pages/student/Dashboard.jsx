@@ -2,8 +2,10 @@ import { Link } from 'react-router-dom';
 import StatsCard from '../../components/academy/StatsCard.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
+import Button from '../../components/ui/Button.jsx';
 import Skeleton from '../../components/ui/Skeleton.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
+import { useAccess } from '../../hooks/useAccess.js';
 import { useExams } from '../../hooks/useExams.js';
 import { useBookings } from '../../hooks/useBookings.js';
 import { useNotifications } from '../../hooks/useNotifications.js';
@@ -13,6 +15,7 @@ import { formatDateTime, formatMonth } from '../../utils/formatDate.js';
 
 export default function Dashboard() {
   const { profile } = useAuth();
+  const { confirmed, loading: accessLoading } = useAccess();
   const { exams, loading: examsLoading } = useExams();
   const { bookings, loading: bookingsLoading } = useBookings();
   const { unreadCount } = useNotifications();
@@ -24,6 +27,22 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* تنبيه الاشتراك — لو مش مفعّل */}
+      {!accessLoading && !confirmed && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lens border border-warning/40 bg-warning/10 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-xl">🔒</span>
+            <div>
+              <p className="text-sm font-bold text-paper">اشتراكك غير مفعل بعد</p>
+              <p className="text-xs text-muted">احجز شهرك وانتظر تأكيد المستر علشان الكورسات والامتحانات تفتح ليك.</p>
+            </div>
+          </div>
+          <Link to="/student/bookings">
+            <Button size="sm">احجز الآن</Button>
+          </Link>
+        </div>
+      )}
+
       {/* ترحيب */}
       <div className="card-panel flex flex-wrap items-center justify-between gap-4 rounded-lens p-6">
         <div>

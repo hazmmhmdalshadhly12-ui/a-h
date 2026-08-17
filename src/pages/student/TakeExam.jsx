@@ -15,6 +15,7 @@ import QuestionRenderer from '../../components/exam/QuestionRenderer.jsx';
 import QuestionNavigation from '../../components/exam/QuestionNavigation.jsx';
 import ExamProgress from '../../components/exam/ExamProgress.jsx';
 import SubmitExamModal from '../../components/exam/SubmitExamModal.jsx';
+import SubscriptionGate from '../../components/academy/SubscriptionGate.jsx';
 import { formatDate } from '../../utils/formatDate.js';
 import { getFriendlyError } from '../../utils/errors.js';
 
@@ -132,12 +133,14 @@ export default function TakeExam() {
 
   if (!exam) {
     return (
-      <Card className="flex flex-col items-center gap-4 py-14 text-center">
-        <p className="text-muted">الامتحان غير موجود.</p>
-        <Link to="/student/exams">
-          <Button variant="secondary">الرجوع للامتحانات</Button>
-        </Link>
-      </Card>
+      <SubscriptionGate>
+        <Card className="flex flex-col items-center gap-4 py-14 text-center">
+          <p className="text-muted">الامتحان غير موجود.</p>
+          <Link to="/student/exams">
+            <Button variant="secondary">الرجوع للامتحانات</Button>
+          </Link>
+        </Card>
+      </SubscriptionGate>
     );
   }
 

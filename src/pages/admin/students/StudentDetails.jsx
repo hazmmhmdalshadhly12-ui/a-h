@@ -53,11 +53,18 @@ export default function StudentDetails() {
         title={student.full_name || 'طالب'}
         subtitle={GRADES[student.grade] || student.grade}
         actions={
-          <Link to="/admin/students">
-            <Button size="sm" variant="secondary">
-              <Icon name="chevronRight" className="h-4 w-4" /> كل الطلاب
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to={`/admin/chat?student=${studentId}`}>
+              <Button size="sm">
+                <Icon name="chat" className="h-4 w-4" /> شات مع الطالب
+              </Button>
+            </Link>
+            <Link to="/admin/students">
+              <Button size="sm" variant="secondary">
+                <Icon name="chevronRight" className="h-4 w-4" /> كل الطلاب
+              </Button>
+            </Link>
+          </div>
         }
       />
 

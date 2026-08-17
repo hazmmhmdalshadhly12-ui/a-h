@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAdminChat } from '../../hooks/useChat.js';
 import AdminHeader from '../../components/admin/AdminHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -13,15 +14,48 @@ import { getFriendlyError } from '../../utils/errors.js';
 import { useToast } from '../../components/ui/Toast.jsx';
 import { cn } from '../../lib/utils.js';
 
+/** تقسيم الرسائل لمجموعات حسب اليوم — زي واتساب */
+function groupByDay(messages) {
+  const groups = [];
+  const map = new Map();
+  for (const m of messages) {
+    const key = new Date(m.created_at || Date.now()).toDateString();
+    if (!map.has(key)) {
+      map.set(key, []);
+      groups.push({ key, items: map.get(key) });
+    }
+    map.get(key).push(m);
+  }
+  return groups;
+}
+
+function DayDivider({ label }) {
+  return (
+    <div className="my-2 flex justify-center">
+      <span className="rounded-full bg-ink-800 px-3 py-1 text-[11px] text-muted">{label}</span>
+    </div>
+  );
+}
+
 export default function Chat() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const studentParam = searchParams.get('student') || null;
   const { profile } = useAuth();
   const toast = useToast();
-  const { conversations, activeId, setActiveId, messages, loading, sending, send, remove } = useAdminChat();
+  const { conversations, activeId, setActiveId, messages, loading, sending, send, remove, openStudentChat, openError } =
+    useAdminChat(studentParam);
   const bottomRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, activeId]);
+
+  // لما نفتح محادثة من ملف الطالب ننضف الـ query param عشان الـ useAdminChat ميعملش open تاني
+  useEffect(() => {
+    if (studentParam && activeId) {
+      setSearchParams({}, { replace: true });
+    }
+  }, [studentParam, activeId, setSearchParams]);
 
   const active = conversations.find((c) => c.id === activeId);
 
@@ -35,9 +69,31 @@ export default function Chat() {
     if (delError) toast.error(getFriendlyError(delError, 'فشل حذف الرسالة'));
   };
 
+  const openChat = async (studentId) => {
+    if (!studentId) return;
+    const { error } = await openStudentChat(studentId);
+    if (error) toast.error(getFriendlyError(error, 'فشل فتح المحادثة'));
+  };
+
+  const dayLabel = (key) => {
+    const today = new Date().toDateString();
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
+    if (key === today) return 'اليوم';
+    if (key === yesterday) return 'أمس';
+    return new Date(key).toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' });
+  };
+
+  const groups = groupByDay(messages);
+
   return (
     <div className="space-y-6">
-      <AdminHeader title="الشات مع الطلاب" subtitle="اسأل وأجب على أسئلة الطلاب من مكان واحد" />
+      <AdminHeader title="الشات مع الطلاب" subtitle="اسأل وأجب على أسئلة الطلاب من مكان واحد — زي واتساب" />
+
+      {openError && (
+        <p className="rounded-lens border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+          {getFriendlyError(openError, 'فشل فتح المحادثة مع الطالب')}
+        </p>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-3">
         {/* قائمة المحادثات */}
@@ -56,7 +112,7 @@ export default function Chat() {
               <EmptyState
                 icon={<Icon name="chat" className="h-6 w-6" />}
                 title="لا توجد محادثات"
-                description="رسائل الطلاب هتظهر هنا."
+                description="رسائل الطلاب هتظهر هنا، أو ابدأ شات مع أي طالب من ملفه."
                 className="py-10"
               />
             ) : (
@@ -72,7 +128,7 @@ export default function Chat() {
                       isActive && 'bg-signal/10'
                     )}
                   >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-signal/15 font-display font-bold text-signal">
+                    <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-signal/15 font-display font-bold text-signal">
                       {(student?.full_name || 'ط').slice(0, 1)}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -114,20 +170,36 @@ export default function Chat() {
                     {active.student?.phone ? ` • ${active.student.phone}` : ''}
                   </p>
                 </div>
+                {active.student && (
+                  <button
+                    type="button"
+                    onClick={() => openChat(active.student.id)}
+                    className="focus-ring mr-auto rounded-lens border border-ink-600 px-3 py-1.5 text-xs font-semibold text-signal transition hover:bg-ink-800"
+                  >
+                    بدء محادثة مع الطالب
+                  </button>
+                )}
               </div>
 
-              <div className="flex-1 space-y-3 overflow-y-auto p-4">
+              <div className="flex-1 overflow-y-auto p-4">
                 {messages.length === 0 ? (
                   <p className="py-10 text-center text-sm text-muted">لا توجد رسائل بعد — ابدأ الرد.</p>
                 ) : (
-                  messages.map((m) => (
-                    <ChatBubble
-                      key={m.id}
-                      message={m}
-                      mine={m.sender_id === profile?.id}
-                      deletable
-                      onDelete={handleDelete}
-                    />
+                  groups.map((g) => (
+                    <div key={g.key}>
+                      <DayDivider label={dayLabel(g.key)} />
+                      <div className="space-y-3">
+                        {g.items.map((m) => (
+                          <ChatBubble
+                            key={m.id}
+                            message={m}
+                            mine={m.sender_id === profile?.id}
+                            deletable
+                            onDelete={handleDelete}
+                          />
+                        ))}
+                      </div>
+                    </div>
                   ))
                 )}
                 <div ref={bottomRef} />

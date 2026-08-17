@@ -8,6 +8,29 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { getFriendlyError } from '../../utils/errors.js';
 import { useToast } from '../../components/ui/Toast.jsx';
 
+/** تقسيم الرسائل لمجموعات حسب اليوم — زي واتساب */
+function groupByDay(messages) {
+  const groups = [];
+  const map = new Map();
+  for (const m of messages) {
+    const key = new Date(m.created_at || Date.now()).toDateString();
+    if (!map.has(key)) {
+      map.set(key, []);
+      groups.push({ key, items: map.get(key) });
+    }
+    map.get(key).push(m);
+  }
+  return groups;
+}
+
+function DayDivider({ label }) {
+  return (
+    <div className="my-2 flex justify-center">
+      <span className="rounded-full bg-ink-800 px-3 py-1 text-[11px] text-muted">{label}</span>
+    </div>
+  );
+}
+
 export default function Chat() {
   const { profile } = useAuth();
   const toast = useToast();
@@ -27,6 +50,16 @@ export default function Chat() {
     const { error: delError } = await remove(messageId);
     if (delError) toast.error(getFriendlyError(delError, 'فشل حذف الرسالة'));
   };
+
+  const dayLabel = (key) => {
+    const today = new Date().toDateString();
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
+    if (key === today) return 'اليوم';
+    if (key === yesterday) return 'أمس';
+    return new Date(key).toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' });
+  };
+
+  const groups = groupByDay(messages);
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -65,14 +98,21 @@ export default function Chat() {
               </p>
             </div>
           ) : (
-            messages.map((m) => (
-              <ChatBubble
-                key={m.id}
-                message={m}
-                mine={m.sender_id === profile?.id}
-                deletable={m.sender_id === profile?.id}
-                onDelete={handleDelete}
-              />
+            groups.map((g) => (
+              <div key={g.key}>
+                <DayDivider label={dayLabel(g.key)} />
+                <div className="space-y-3">
+                  {g.items.map((m) => (
+                    <ChatBubble
+                      key={m.id}
+                      message={m}
+                      mine={m.sender_id === profile?.id}
+                      deletable={m.sender_id === profile?.id}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </div>
+              </div>
             ))
           )}
 

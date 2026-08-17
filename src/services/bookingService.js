@@ -6,7 +6,7 @@ export async function fetchBookingsForStudent(studentId) {
 }
 
 /** حجز شهري — الاسم + موبايل الطالب + ولي الأمر + الصف + الشهر المطلوب */
-export async function createBooking({ studentId, fullName, phone, parentPhone, grade, month, notes }) {
+export async function createBooking({ studentId, fullName, phone, parentPhone, grade, month, notes, transferNumber }) {
   return supabase
     .from('bookings')
     .insert({
@@ -16,7 +16,8 @@ export async function createBooking({ studentId, fullName, phone, parentPhone, g
       parent_phone: parentPhone || null,
       grade: grade || 'first_secondary',
       month: month || null,
-      notes: notes || null
+      notes: notes || null,
+      transfer_number: transferNumber || null
     })
     .select()
     .single();

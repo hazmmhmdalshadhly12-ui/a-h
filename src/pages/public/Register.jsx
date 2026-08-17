@@ -61,6 +61,8 @@ export default function Register() {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [needConfirm, setNeedConfirm] = useState(false);
+  // تشخيص مؤقت — يعرض نتيجة الطلب على الشاشة عشان نشوف إيه اللي بيحصل فعلاً
+  const [diag, setDiag] = useState('');
 
   const validate = () => {
     const errs = {};
@@ -97,6 +99,7 @@ export default function Register() {
         // سجّل الخطأ الفعلي للتحقق (من غير ما يظهر للمستخدم أي تفاصيل)
         console.error('[Register] signUp error:', error);
         console.error('[Register] signUp status:', error?.status, '| code:', error?.code);
+        setDiag(`خطأ: ${error?.status || ''} ${error?.code || ''} ${error?.message || ''}`);
 
         const translated = translateAuthError(error);
         if (translated?.email) {
@@ -120,15 +123,18 @@ export default function Register() {
       }
 
       if (data?.session) {
+        setDiag('نجاح: جلسة اتسجلت');
         toast.success('تم إنشاء حسابك');
         navigate('/student/dashboard', { replace: true });
       } else {
+        setDiag('نجاح بلا جلسة: الحساب اتخلق ومحتاج تفعيل إيميل (Confirm email)');
         // لو تفعيل الإيميل شغال في Supabase — بيقوله يتفقد الإيميل
         setNeedConfirm(true);
       }
     } catch (err) {
       setLoading(false);
       console.error('[Register] signUp threw:', err);
+      setDiag('استثناء: ' + (err?.message || String(err)));
       toast.error('حصلت مشكلة غير متوقعة في التسجيل — حاول مرة أخرى أو راسل الأدمن');
     }
   };
@@ -222,6 +228,11 @@ export default function Register() {
                 <Button type="submit" className="w-full" size="lg" loading={loading}>
                   إنشاء الحساب
                 </Button>
+                {diag && (
+                  <p className="rounded-lg bg-black/5 p-3 text-xs text-muted" dir="ltr">
+                    [diag] {diag}
+                  </p>
+                )}
               </form>
             )}
           </Card>

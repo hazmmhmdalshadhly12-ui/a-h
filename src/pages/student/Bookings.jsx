@@ -11,6 +11,7 @@ import Skeleton from '../../components/ui/Skeleton.jsx';
 import EmptyState from '../../components/ui/EmptyState.jsx';
 import { useToast } from '../../components/ui/Toast.jsx';
 import { GRADES_OPTIONS } from '../../config/constants.js';
+import { PAYMENT_INFO } from '../../config/constants.js';
 import { validateName, validatePhone } from '../../utils/validators.js';
 import { getFriendlyError } from '../../utils/errors.js';
 
@@ -24,17 +25,22 @@ export default function Bookings() {
   const { bookings, loading, reload, requestBooking } = useBookings();
   const toast = useToast();
 
-  // بيملى من البروفايل — الطالب بيأكد بياناته وبيختار الشهر
   const [form, setForm] = useState({
     full_name: profile?.full_name || '',
     phone: profile?.phone || '',
     parent_phone: profile?.parent_phone || '',
     grade: profile?.grade || 'first_secondary',
     month: currentMonth(),
-    notes: ''
+    notes: '',
+    transfer_number: ''
   });
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
+
+  // المبلغ حسب الصف: أولى = 150، ثانية = 250
+  const amount = PAYMENT_INFO.amounts[form.grade] || PAYMENT_INFO.amounts.first_secondary;
+  const instagram = PAYMENT_INFO.instagramNumber;
 
   const validate = () => {
     const errs = {};
@@ -42,13 +48,22 @@ export default function Bookings() {
     errs.phone = validatePhone(form.phone, { required: true });
     errs.parent_phone = validatePhone(form.parent_phone, { label: 'رقم ولي الأمر' });
     if (!form.month) errs.month = 'اختر شهر الحجز';
+    if (!form.transfer_number.trim()) errs.transfer_number = 'اكتب الرقم اللي حولت منه';
     setErrors(errs);
     return !Object.values(errs).some(Boolean);
   };
 
+  // الخطوة 1: إرسال الحجز → الخطوة 2: رسالة الدفع
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
+
+    // لو لسه مظهروش رسالة الدفع → نظهرها الأول (رسالة مبالغ التحويل)
+    if (!showPayment) {
+      setShowPayment(true);
+      return;
+    }
+
     setSubmitting(true);
     const { error } = await requestBooking({
       fullName: form.full_name,
@@ -56,14 +71,16 @@ export default function Bookings() {
       parentPhone: form.parent_phone,
       grade: form.grade,
       month: form.month,
-      notes: form.notes
+      notes: form.notes,
+      transferNumber: form.transfer_number.trim()
     });
     setSubmitting(false);
     if (error) {
       toast.error(getFriendlyError(error, 'فشل الحجز'));
       return;
     }
-    toast.success('تم إرسال طلب الحجز الشهري — قيد مراجعة المستر');
+    toast.success('تم إتمام الطلب — قيد مراجعة المستر، وكمل الخطوات اللي جوة رسالة الدفع');
+    setShowPayment(false);
     reload();
   };
 
@@ -81,6 +98,7 @@ export default function Bookings() {
         <p className="rounded-lens bg-ink-800 px-3 py-2 text-xs text-muted">
           بياناتك دي بتتسجل في الحجز لتأكيد هويتك — راجعها قبل الإرسال.
         </p>
+
         <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
           <Input
             name="full_name"
@@ -127,6 +145,16 @@ export default function Bookings() {
             error={errors.month}
             required
           />
+          <Input
+            name="transfer_number"
+            label="الرقم اللي حولت منه *"
+            dir="ltr"
+            placeholder="01xxxxxxxxx"
+            value={form.transfer_number}
+            onChange={(e) => setForm({ ...form, transfer_number: e.target.value })}
+            error={errors.transfer_number}
+            required
+          />
           <Textarea
             name="notes"
             label="ملاحظات (اختياري)"
@@ -137,10 +165,25 @@ export default function Bookings() {
           />
           <div className="sm:col-span-2">
             <Button type="submit" loading={submitting}>
-              إرسال طلب الحجز
+              {showPayment ? 'إتمام الطلب' : 'إرسال طلب الحجز'}
             </Button>
           </div>
         </form>
+
+        {/* رسالة الدفع — بتظهر بعد إرسال الطلب */}
+        {showPayment && (
+          <div className="rounded-lens border border-signal/40 bg-signal/10 p-4">
+            <h3 className="font-display text-base font-black text-paper">رسالة الدفع 💳</h3>
+            <ul className="mt-2 list-inside list-disc space-y-1.5 text-sm leading-relaxed text-paper/90">
+              <li>حوّل <b>{amount} جنيه</b> {form.grade === 'second_secondary' ? 'للصف الثاني الثانوي' : 'للصف الأول الثانوي'}</li>
+              <li>على رقم الإنستجرام: <b dir="ltr" className="font-mono">{instagram}</b></li>
+              <li>محفظة كاش غير متوفر الآن — التحويل يكون من رقم مضمون بإسمك</li>
+            </ul>
+            <p className="mt-3 text-xs text-muted">
+              بعد التحويل اضغط "إتمام الطلب" وانتظر المستر يؤكد اشتراكك — هتفضل الكورسات والامتحانات مقفولة لحد التأكيد.
+            </p>
+          </div>
+        )}
       </Card>
 
       <div>

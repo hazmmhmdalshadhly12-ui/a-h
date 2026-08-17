@@ -41,6 +41,11 @@ export default function Courses() {
     { key: 'title', label: 'العنوان', render: (c) => <span className="font-semibold text-paper">{c.title}</span> },
     { key: 'grade', label: 'الصف', render: (c) => <Badge color="muted">{GRADES[c.grade] || c.grade}</Badge> },
     {
+      key: 'section',
+      label: 'القسم',
+      render: (c) => (c.section ? <Badge color="stream">{c.section.title}</Badge> : <span className="text-muted">بدون</span>)
+    },
+    {
       key: 'video',
       label: 'فيديو',
       render: (c) => (c.video_url ? <Badge color="success">موجود</Badge> : <Badge color="warning">بدون</Badge>)
@@ -50,6 +55,11 @@ export default function Courses() {
       label: 'إجراءات',
       render: (c) => (
         <div className="flex items-center gap-1.5">
+          <Link to={`/admin/courses/${c.id}/manage`}>
+            <Button size="sm" variant="secondary">
+              <Icon name="courses" className="h-3.5 w-3.5" />
+            </Button>
+          </Link>
           <Link to={`/admin/courses/${c.id}`}>
             <Button size="sm" variant="secondary">
               <Icon name="edit" className="h-3.5 w-3.5" />
