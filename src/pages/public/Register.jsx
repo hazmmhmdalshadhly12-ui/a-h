@@ -13,6 +13,34 @@ import { validateEmail, validatePassword, validatePhone, validateName } from '..
 import { isSupabaseConfigured } from '../../lib/supabaseClient.js';
 import { getFriendlyError } from '../../utils/errors.js';
 
+/** ترجمة رسائل Auth المعروفة من Supabase لرسائل عربية واضحة (بدون أي تفاصيل تقنية) */
+function translateAuthError(error) {
+  const msg = (error?.message || '').toLowerCase();
+  const code = (error?.code || '').toLowerCase();
+
+  if (msg.includes('already registered') || code.includes('user_already_exists')) {
+    return { email: 'هذا الإيميل مسجل بالفعل — جرّب تسجيل الدخول' };
+  }
+  if (msg.includes('disabled') || msg.includes('not allowed') || code.includes('signup_disabled') || msg.includes('signups')) {
+    return {
+      form: 'التسجيل غير مفعّل حالياً في إعدادات Supabase — فعّل "Enable Sign Ups" من Authentication → Sign In / Up'
+    };
+  }
+  if (msg.includes('password') || code.includes('weak_password')) {
+    return { password: 'الباسورد غير صالح — 6 أحرف على الأقل' };
+  }
+  if (msg.includes('invalid email') || msg.includes('email not allowed') || msg.includes('unable to validate email')) {
+    return { email: 'الإيميل غير صالح — تأكد من كتابته صح' };
+  }
+  if (msg.includes('rate limit') || msg.includes('too many requests')) {
+    return { form: 'طلبات كتير في وقت قصير — استنى شوية وحاول تاني' };
+  }
+  if (msg.includes('over email send rate limit')) {
+    return { form: 'لينكات التفعيل اتتبعتت كتير — استنى دقيقة وحاول تاني' };
+  }
+  return null;
+}
+
 export default function Register() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -53,10 +81,18 @@ export default function Register() {
     setLoading(false);
 
     if (error) {
-      if (error.message?.toLowerCase().includes('already registered')) {
-        setErrors({ email: 'هذا الإيميل مسجل بالفعل' });
+      // سجّل الخطأ الفعلي للتحقق (من غير ما يظهر للمستخدم أي تفاصيل)
+      console.error('[Register] signUp error:', error);
+
+      const translated = translateAuthError(error);
+      if (translated?.email) {
+        setErrors({ email: translated.email });
+      } else if (translated?.password) {
+        setErrors({ password: translated.password });
+      } else if (translated?.form) {
+        setErrors({ form: translated.form });
       } else {
-        toast.error(getFriendlyError(error, 'فشل التسجيل'));
+        toast.error(getFriendlyError(error, 'فشل التسجيل — تأكد من البيانات أو حاول مرة أخرى'));
       }
       return;
     }
