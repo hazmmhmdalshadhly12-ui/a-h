@@ -1,5 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchCourses, fetchCourseById } from '../services/courseService.js';
+import { fetchCourses, fetchStudentCourses, fetchCourseById } from '../services/courseService.js';
+
+/** كورسات الطالب — مع حالة القفل (accessible) حسب اشتراكه */
+export function useStudentCourses(grade) {
+  const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await fetchStudentCourses(grade);
+    setCourses(data || []);
+    setError(error);
+    setLoading(false);
+  }, [grade]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return { courses, loading, error, reload: load };
+}
 
 export function useCourses(grade) {
   const [courses, setCourses] = useState([]);

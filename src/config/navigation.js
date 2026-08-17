@@ -23,6 +23,7 @@ export const ADMIN_NAV = [
       { label: 'نظرة عامة', path: '/admin', icon: 'dashboard', end: true },
       { label: 'الامتحانات', path: '/admin/exams', icon: 'exams' },
       { label: 'الكورسات', path: '/admin/courses', icon: 'courses' },
+      { label: 'أقسام الكورسات', path: '/admin/sections', icon: 'courses' },
       { label: 'الحجوزات', path: '/admin/bookings', icon: 'bookings' },
       { label: 'المسابقات', path: '/admin/competitions', icon: 'competitions' },
       { label: 'الشات مع الطلاب', path: '/admin/chat', icon: 'chat' }

@@ -5,13 +5,18 @@ import Textarea from '../ui/Textarea.jsx';
 import Button from '../ui/Button.jsx';
 import { GRADES_OPTIONS } from '../../config/constants.js';
 
-/** فورم كورس — بيستخدم في الإنشاء والتعديل */
-export default function CourseForm({ initial, onSubmit, submitting }) {
+/** فورم كورس — بيستخدم في الإنشاء والتعديل.
+ *  الصورة: بتتخزن كرابط مباشر (Image URL) عشان يظهرلها في بطاقة الكورس.
+ *  القسم: اختياري — جوه الأقسام اللي المستر ينشئها.
+ */
+export default function CourseForm({ initial, onSubmit, submitting, sections = [] }) {
   const [form, setForm] = useState({
     title: '',
     description: '',
     grade: 'first_secondary',
     video_url: '',
+    image_url: '',
+    section_id: '',
     order_index: 1,
     ...initial
   });
@@ -22,9 +27,15 @@ export default function CourseForm({ initial, onSubmit, submitting }) {
     e.preventDefault();
     onSubmit({
       ...form,
-      order_index: Number(form.order_index) || 1
+      order_index: Number(form.order_index) || 1,
+      section_id: form.section_id || null
     });
   };
+
+  const sectionOptions = [
+    { value: '', label: 'بدون قسم' },
+    ...sections.map((s) => ({ value: s.id, label: `${s.title} (${s.grade === 'second_secondary' ? 'ثانية' : 'أولى'})` }))
+  ];
 
   return (
     <form onSubmit={handleSubmit} className="card-panel space-y-4 rounded-lens p-5">
@@ -48,6 +59,23 @@ export default function CourseForm({ initial, onSubmit, submitting }) {
           dir="ltr"
           value={form.video_url}
           onChange={(e) => patch({ video_url: e.target.value })}
+        />
+        <Input
+          name="image_url"
+          label="رابط صورة الكورس"
+          placeholder="https://example.com/image.jpg"
+          dir="ltr"
+          value={form.image_url}
+          onChange={(e) => patch({ image_url: e.target.value })}
+        />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Select
+          name="section_id"
+          label="القسم"
+          value={form.section_id || ''}
+          onChange={(e) => patch({ section_id: e.target.value })}
+          options={sectionOptions}
         />
         <Input
           name="order_index"

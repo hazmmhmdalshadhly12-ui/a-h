@@ -20,6 +20,9 @@ export default function BookingCard({ booking }) {
       <p className="text-sm text-muted">الصف: {GRADES[booking.grade] || booking.grade || '—'}</p>
       <p className="text-sm text-muted">الاسم: {booking.full_name || '—'}</p>
       <p className="text-sm text-muted" dir="ltr">موبايل: {booking.phone || '—'}</p>
+      {booking.transfer_number && (
+        <p className="text-sm text-muted" dir="ltr">رقم التحويل: {booking.transfer_number}</p>
+      )}
       {booking.parent_phone && <p className="text-sm text-muted" dir="ltr">ولي الأمر: {booking.parent_phone}</p>}
       {booking.notes && <p className="text-sm text-muted">ملاحظات: {booking.notes}</p>}
     </Card>

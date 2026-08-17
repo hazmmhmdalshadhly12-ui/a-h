@@ -17,6 +17,24 @@ export const BOOKING_STATUSES = {
   rejected: { value: 'rejected', label: 'مرفوض', color: 'danger' }
 };
 
+/** بيانات الدفع الشهري — بتظهر للطالب بعد إرسال طلب الحجز */
+export const PAYMENT_INFO = {
+  amounts: {
+    first_secondary: 150,
+    second_secondary: 250
+  },
+  instagramNumber: '01127703810',
+  note: 'محفظة كاش غير متوفر الآن'
+};
+
+/** أنواع أسئلة الواجب (صح/غلط أو اختيار) */
+export const HOMEWORK_QUESTION_TYPES = {
+  mcq: { value: 'mcq', label: 'اختيار من متعدد' },
+  true_false: { value: 'true_false', label: 'صح / غلط' }
+};
+
+export const HOMEWORK_QUESTION_TYPE_OPTIONS = Object.values(HOMEWORK_QUESTION_TYPES);
+
 export const EXAM_STATUS = {
   not_started: { value: 'not_started', label: 'لم يبدأ' },
   open: { value: 'open', label: 'متاح الآن' },

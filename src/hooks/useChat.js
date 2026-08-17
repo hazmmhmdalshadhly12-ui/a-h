@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './useAuth.js';
 import {
   getOrCreateConversation,
+  getOrCreateConversationWithStudent,
   fetchMessages,
   sendMessage,
   markConversationRead,
@@ -85,15 +86,18 @@ export function useStudentChat() {
   return { conversationId, messages, loading, sending, error, send, remove, reload: load };
 }
 
-/** شات الأدمن — كل المحادثات مع الطلاب + الرسائل */
-export function useAdminChat() {
+/** شات الأدمن — كل المحادثات مع الطلاب + الرسائل.
+ *  openStudentId: اختياري — لو اتبعت، بيشغّل محادثة مع الطالب ده مباشرة (من ملف الطالب). */
+export function useAdminChat(openStudentId) {
   const { profile } = useAuth();
   const [conversations, setConversations] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [openError, setOpenError] = useState(null);
   const loadedConv = useRef(null);
+  const openingRef = useRef(false);
 
   const loadConversations = useCallback(async () => {
     const { data } = await fetchAllConversations();
@@ -105,6 +109,39 @@ export function useAdminChat() {
     const interval = setInterval(loadConversations, 10000);
     return () => clearInterval(interval);
   }, [loadConversations]);
+
+  // فتح محادثة مع طالب محدد (الأدمن يبدأ الشات من ملف الطالب)
+  useEffect(() => {
+    if (!openStudentId) {
+      openingRef.current = false;
+      return;
+    }
+    if (openingRef.current === openStudentId) return;
+    openingRef.current = openStudentId;
+    getOrCreateConversationWithStudent(openStudentId).then(({ data, error }) => {
+      if (openingRef.current !== openStudentId) return;
+      openingRef.current = false;
+      if (error) {
+        setOpenError(error);
+        return;
+      }
+      setOpenError(null);
+      setActiveId(data);
+      loadConversations();
+    });
+  }, [openStudentId, loadConversations]);
+
+  const openStudentChat = useCallback(
+    async (studentId) => {
+      if (!studentId) return { error: { message: 'حدد الطالب أولاً' } };
+      const { data, error } = await getOrCreateConversationWithStudent(studentId);
+      if (error) return { error };
+      setActiveId(data);
+      loadConversations();
+      return { data };
+    },
+    [loadConversations]
+  );
 
   // لما نختار محادثة نجيب رسائلها
   useEffect(() => {
@@ -149,5 +186,5 @@ export function useAdminChat() {
     []
   );
 
-  return { conversations, activeId, setActiveId, messages, loading, sending, send, remove };
+  return { conversations, activeId, setActiveId, messages, loading, sending, send, remove, openStudentChat, openError };
 }

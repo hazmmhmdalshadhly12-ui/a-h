@@ -29,6 +29,16 @@ export default function BookingTable({ bookings, onUpdateStatus }) {
       render: (b) => <span className="text-paper/90">{formatMonth(b.month)}</span>
     },
     {
+      key: 'transfer',
+      label: 'رقم التحويل',
+      render: (b) =>
+        b.transfer_number ? (
+          <span className="font-mono text-xs text-paper/90" dir="ltr">{b.transfer_number}</span>
+        ) : (
+          <span className="text-xs text-muted">—</span>
+        )
+    },
+    {
       key: 'status',
       label: 'الحالة',
       render: (b) => (

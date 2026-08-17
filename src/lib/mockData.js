@@ -10,6 +10,30 @@ export const MOCK_CONTACT_LINKS = [
   { id: 'c6', platform: 'instagram', label: 'إنستجرام', value: 'https://instagram.com/visionacademy' }
 ];
 
+export const MOCK_SECTIONS = [
+  {
+    id: 'sec1',
+    title: 'مقدمة الحاسب',
+    grade: 'first_secondary',
+    order_index: 1,
+    created_at: new Date(Date.now() - 30 * 86400000).toISOString()
+  },
+  {
+    id: 'sec2',
+    title: 'البرمجة',
+    grade: 'first_secondary',
+    order_index: 2,
+    created_at: new Date(Date.now() - 20 * 86400000).toISOString()
+  },
+  {
+    id: 'sec3',
+    title: 'قواعد البيانات',
+    grade: 'second_secondary',
+    order_index: 1,
+    created_at: new Date(Date.now() - 10 * 86400000).toISOString()
+  }
+];
+
 export const MOCK_COURSES = [
   {
     id: 'cr1',
