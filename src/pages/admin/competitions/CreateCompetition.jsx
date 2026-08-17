@@ -3,6 +3,7 @@ import AdminHeader from '../../../components/admin/AdminHeader.jsx';
 import CompetitionForm from '../../../components/admin/CompetitionForm.jsx';
 import { useToast } from '../../../components/ui/Toast.jsx';
 import { createCompetition } from '../../../services/competitionService.js';
+import { getFriendlyError } from '../../../utils/errors.js';
 
 export default function CreateCompetition() {
   const navigate = useNavigate();
@@ -10,7 +11,7 @@ export default function CreateCompetition() {
 
   const handleSubmit = async (payload) => {
     const { error } = await createCompetition(payload);
-    if (error) return toast.error(error.message || 'فشل الإنشاء');
+    if (error) return toast.error(getFriendlyError(error, 'فشل الإنشاء'));
     toast.success('تم إنشاء المسابقة');
     navigate('/admin/competitions');
   };

@@ -20,8 +20,8 @@ const FEATURES = [
   },
   {
     icon: 'bookings',
-    title: 'حجوزات الحصص',
-    desc: 'احجز حصة أونلاين واعرف حالتها فوراً: قيد المراجعة، مؤكدة، أو مرفوضة.'
+    title: 'اشتراك شهري',
+    desc: 'سجّل اشتراكك الشهري (باسمك ورقمك وولي أمرك) واعرف حالته فوراً: قيد المراجعة، مؤكد، أو مرفوض.'
   },
   {
     icon: 'competitions',
@@ -34,12 +34,13 @@ const STEPS = [
   { n: '01', title: 'سجّل حسابك', desc: 'بالاسم والموبايل والصف، في أقل من دقيقة.' },
   { n: '02', title: 'شاهد الكورسات', desc: 'ابدا من أول درس وامشي بالترتيب.' },
   { n: '03', title: 'حل الامتحانات', desc: 'اختبر نفسك واعرف درجتك بعد مراجعة المستر.' },
-  { n: '04', title: 'احجز وشارك', desc: 'احجز حصتك وشارك في المسابقات.' }
+  { n: '04', title: 'اشترك وشارك', desc: 'سجّل اشتراكك الشهري وشارك في المسابقات.' }
 ];
 
 export default function Home() {
-  const { session } = useAuth();
-  const ctaPath = session ? '/student/dashboard' : '/register';
+  const { session, profile } = useAuth();
+  // الوجهة حسب الدور: أدمن → لوحة الأدمن، طالب → بوابة الطالب
+  const ctaPath = profile?.role === 'admin' ? '/admin' : session ? '/student/dashboard' : '/register';
 
   return (
     <PublicLayout>
@@ -56,7 +57,7 @@ export default function Home() {
               <span className="text-gradient">لمستقبل ثانوي</span>
             </h1>
             <p className="mt-5 max-w-xl text-base leading-relaxed text-muted sm:text-lg">
-              {SITE.instructor.title}. كورسات، امتحانات، حجوزات، ومسابقات — كل اللي محتاجه الطالب
+              {SITE.instructor.title}. كورسات، امتحانات، اشتراك شهري، ومسابقات — كل اللي محتاجه الطالب
               يبني أساس برمجة قوي من الصف الأول الثانوي.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">

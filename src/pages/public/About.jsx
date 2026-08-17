@@ -42,7 +42,7 @@ export default function About() {
         <div className="mx-auto mt-12 max-w-3xl rounded-lens border border-ink-600 bg-ink-800/60 p-8 text-center">
           <h2 className="font-display text-2xl font-black">{SITE.instructor.title}</h2>
           <p className="mt-3 text-muted">
-            المادة بتتقدم بمتابعة مباشرة من {SITE.instructor.name} — مراجعة الحجوزات، تصحيح الامتحانات
+            المادة بتتقدم بمتابعة مباشرة من {SITE.instructor.name} — مراجعة الاشتراكات، تصحيح الامتحانات
             المقالية، ونشر الدرجات يتم يدوياً لضمان دقة التقييم.
           </p>
           <div className="mt-6">

@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabaseClient.js';
-import { safeQuery } from '../lib/database.js';
+import { safeQuery, isSupabaseConfigured } from '../lib/database.js';
 
 // ===== واجهة الطالب =====
 
@@ -44,8 +44,15 @@ export async function fetchExamById(examId) {
  * عشان منع أي وصول للإجابات قبل التسليم.
  */
 export async function fetchExamQuestionsForStudent(examId) {
+  if (!isSupabaseConfigured) {
+    console.error('[fetchExamQuestionsForStudent] Supabase غير مُعد — المفاتيح ناقصة في البناء');
+    return { data: [], error: { message: 'Supabase غير مُعد — أضف مفاتيح VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY' } };
+  }
   const { data, error } = await supabase.rpc('get_exam_questions', { p_exam_id: examId });
-  if (error) return { data: [], error };
+  if (error) {
+    console.error('[fetchExamQuestionsForStudent] error:', error);
+    return { data: [], error };
+  }
   return { data: data || [], error: null };
 }
 

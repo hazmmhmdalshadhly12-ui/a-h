@@ -3,6 +3,7 @@ import AdminHeader from '../../../components/admin/AdminHeader.jsx';
 import ExamBuilder from '../../../components/admin/ExamBuilder.jsx';
 import { useToast } from '../../../components/ui/Toast.jsx';
 import { createExam, replaceExamQuestions } from '../../../services/examService.js';
+import { getFriendlyError } from '../../../utils/errors.js';
 
 export default function CreateExam() {
   const navigate = useNavigate();
@@ -12,7 +13,7 @@ export default function CreateExam() {
     const { questions, ...exam } = payload;
     const { data, error } = await createExam(exam);
     if (error) {
-      toast.error(error.message || 'فشل إنشاء الامتحان');
+      toast.error(getFriendlyError(error, 'فشل إنشاء الامتحان'));
       return;
     }
     const { error: qError } = await replaceExamQuestions(data.id, questions);

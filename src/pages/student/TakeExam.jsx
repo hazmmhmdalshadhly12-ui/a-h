@@ -16,6 +16,7 @@ import QuestionNavigation from '../../components/exam/QuestionNavigation.jsx';
 import ExamProgress from '../../components/exam/ExamProgress.jsx';
 import SubmitExamModal from '../../components/exam/SubmitExamModal.jsx';
 import { formatDate } from '../../utils/formatDate.js';
+import { getFriendlyError } from '../../utils/errors.js';
 
 export default function TakeExam() {
   const { examId } = useParams();
@@ -55,7 +56,7 @@ export default function TakeExam() {
       .then(({ data, error }) => {
         if (!active) return;
         if (error) {
-          setQuestionsError(error.message || 'فشل تحميل الأسئلة');
+          setQuestionsError(getFriendlyError(error, 'فشل تحميل الأسئلة'));
           return;
         }
         setQuestions(data || []);
@@ -68,7 +69,7 @@ export default function TakeExam() {
       .catch((err) => {
         if (!active) return;
         console.error('[TakeExam] جلب الأسئلة فشل:', err);
-        setQuestionsError(err?.message || 'فشل تحميل الأسئلة');
+        setQuestionsError(getFriendlyError(err, 'فشل تحميل الأسئلة'));
       })
       .finally(() => {
         clearTimeout(safetyTimer);
@@ -116,7 +117,7 @@ export default function TakeExam() {
       if (error.code === '23505' || error.message?.includes('already submitted') || error.message?.includes('محاولة واحدة')) {
         toast.error('انت سلّمت هذا الامتحان من قبل — محاولة واحدة فقط');
       } else {
-        toast.error(error.message || 'فشل التسليم، حاول مرة أخرى');
+        toast.error(getFriendlyError(error, 'فشل التسليم، حاول مرة أخرى'));
       }
       navigate('/student/exams', { replace: true });
       return;

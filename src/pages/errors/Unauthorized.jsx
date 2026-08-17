@@ -1,8 +1,13 @@
 import { Link } from 'react-router-dom';
 import PageContainer from '../../components/layout/PageContainer.jsx';
 import Button from '../../components/ui/Button.jsx';
+import { useAuth } from '../../hooks/useAuth.js';
 
 export default function Unauthorized() {
+  const { profile } = useAuth();
+  // زر الرئيسية يوديك للوحة بتاعتك حسب الدور — مش للـ 403 تاني
+  const homePath = profile?.role === 'admin' ? '/admin' : '/student/dashboard';
+
   return (
     <PageContainer className="items-center justify-center px-4">
       <div className="text-center">
@@ -13,9 +18,15 @@ export default function Unauthorized() {
           الصلاحيات بتتأكد من قاعدة البيانات نفسها، مش من الواجهة بس.
         </p>
         <div className="mt-6 flex justify-center gap-2">
-          <Link to="/">
-            <Button>الرئيسية</Button>
-          </Link>
+          {profile ? (
+            <Link to={homePath}>
+              <Button>لوحتي</Button>
+            </Link>
+          ) : (
+            <Link to="/">
+              <Button>الرئيسية</Button>
+            </Link>
+          )}
           <Link to="/login">
             <Button variant="secondary">تسجيل دخول مختلف</Button>
           </Link>

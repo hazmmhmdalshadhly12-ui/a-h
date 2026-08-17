@@ -9,7 +9,7 @@ import { useBookings } from '../../hooks/useBookings.js';
 import { useNotifications } from '../../hooks/useNotifications.js';
 import { GRADES } from '../../config/site.js';
 import { BOOKING_STATUSES } from '../../config/constants.js';
-import { formatDateTime } from '../../utils/formatDate.js';
+import { formatDateTime, formatMonth } from '../../utils/formatDate.js';
 
 export default function Dashboard() {
   const { profile } = useAuth();
@@ -90,7 +90,7 @@ export default function Dashboard() {
             <Skeleton className="h-14" />
           ) : lastBooking ? (
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-paper">📅 {formatDateTime(lastBooking.requested_datetime)}</p>
+              <p className="text-sm font-semibold text-paper">📅 حجز شهر: {formatMonth(lastBooking.month)}</p>
               <Badge color={BOOKING_STATUSES[lastBooking.status]?.color || 'muted'}>
                 {BOOKING_STATUSES[lastBooking.status]?.label || lastBooking.status}
               </Badge>
@@ -98,9 +98,9 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="flex flex-col items-start gap-3 py-4">
-              <p className="text-sm text-muted">لسه محجزش حصة — احجز واجب الحجز من لوحة الحجوزات.</p>
+              <p className="text-sm text-muted">لسه محجزش شهر — سجل اشتراكك من لوحة الحجوزات.</p>
               <Link to="/student/bookings" className="focus-ring rounded-lens border border-signal/50 px-4 py-2 text-sm font-bold text-signal">
-                احجز حصة
+                احجز شهر
               </Link>
             </div>
           )}

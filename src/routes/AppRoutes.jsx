@@ -22,6 +22,7 @@ import Competitions from '../pages/student/Competitions.jsx';
 import CompetitionDetails from '../pages/student/CompetitionDetails.jsx';
 import Notifications from '../pages/student/Notifications.jsx';
 import Profile from '../pages/student/Profile.jsx';
+import StudentChat from '../pages/student/Chat.jsx';
 
 import AdminLayout from '../pages/admin/AdminLayout.jsx';
 import AdminDashboard from '../pages/admin/Dashboard.jsx';
@@ -41,6 +42,7 @@ import AdminStudents from '../pages/admin/students/Students.jsx';
 import StudentDetails from '../pages/admin/students/StudentDetails.jsx';
 import ContactLinks from '../pages/admin/contacts/ContactLinks.jsx';
 import AdminSettings from '../pages/admin/settings/Settings.jsx';
+import AdminChat from '../pages/admin/Chat.jsx';
 
 import NotFound from '../pages/errors/NotFound.jsx';
 import Unauthorized from '../pages/errors/Unauthorized.jsx';
@@ -77,6 +79,7 @@ export default function AppRoutes() {
         <Route path="competitions" element={<Competitions />} />
         <Route path="competitions/:id" element={<CompetitionDetails />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="chat" element={<StudentChat />} />
         <Route path="profile" element={<Profile />} />
       </Route>
 
@@ -104,6 +107,7 @@ export default function AppRoutes() {
         <Route path="competitions/:id" element={<EditCompetition />} />
         <Route path="students" element={<AdminStudents />} />
         <Route path="students/:studentId" element={<StudentDetails />} />
+        <Route path="chat" element={<AdminChat />} />
         <Route path="contacts" element={<ContactLinks />} />
         <Route path="settings" element={<AdminSettings />} />
       </Route>

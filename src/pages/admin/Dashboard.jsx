@@ -9,6 +9,7 @@ import { fetchAllExams } from '../../services/examService.js';
 import { fetchAllBookings } from '../../services/bookingService.js';
 import { fetchAllStudents } from '../../services/profileService.js';
 import { fetchAllSubmissionsAdmin } from '../../services/submissionService.js';
+import { formatMonth } from '../../utils/formatDate.js';
 
 export default function Dashboard() {
   const [exams, setExams] = useState([]);
@@ -76,8 +77,8 @@ export default function Dashboard() {
               {bookings.slice(0, 4).map((b) => (
                 <li key={b.id} className="flex items-center justify-between gap-3 py-3">
                   <div>
-                    <p className="text-sm font-semibold text-paper">{b.profiles?.full_name || '—'}</p>
-                    <p className="text-xs text-muted">{new Date(b.requested_datetime).toLocaleString('ar-EG')}</p>
+                    <p className="text-sm font-semibold text-paper">{b.full_name || b.profiles?.full_name || '—'}</p>
+                    <p className="text-xs text-muted">{formatMonth(b.month)}</p>
                   </div>
                   <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
                     b.status === 'pending' ? 'bg-warning/15 text-warning' :

@@ -34,7 +34,7 @@ export default function Bookings() {
 
   return (
     <div className="space-y-6">
-      <AdminHeader title="الحجوزات" subtitle="راجع طلبات الحجز وأكّد أو ارفض" />
+      <AdminHeader title="الحجوزات" subtitle="راجع طلبات الاشتراك الشهري وأكّد أو ارفض" />
       <FilterBar
         filters={[
           {

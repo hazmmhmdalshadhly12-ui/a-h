@@ -3,6 +3,7 @@ import AdminHeader from '../../../components/admin/AdminHeader.jsx';
 import CourseForm from '../../../components/admin/CourseForm.jsx';
 import { useToast } from '../../../components/ui/Toast.jsx';
 import { createCourse } from '../../../services/courseService.js';
+import { getFriendlyError } from '../../../utils/errors.js';
 
 export default function CreateCourse() {
   const navigate = useNavigate();
@@ -10,7 +11,7 @@ export default function CreateCourse() {
 
   const handleSubmit = async (payload) => {
     const { error } = await createCourse(payload);
-    if (error) return toast.error(error.message || 'فشل الإنشاء');
+    if (error) return toast.error(getFriendlyError(error, 'فشل الإنشاء'));
     toast.success('تم إضافة الدرس');
     navigate('/admin/courses');
   };

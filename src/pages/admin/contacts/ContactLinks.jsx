@@ -7,6 +7,7 @@ import { useToast } from '../../../components/ui/Toast.jsx';
 import { fetchContactLinks, saveContactLinks } from '../../../services/contactService.js';
 import { CONTACT_PLATFORM_OPTIONS } from '../../../config/constants.js';
 import { isSupabaseConfigured } from '../../../lib/supabaseClient.js';
+import { getFriendlyError } from '../../../utils/errors.js';
 
 /** لوحة تعديل روابط التواصل — بتحفظ في قاعدة البيانات من غير تعديل كود */
 export default function ContactLinks() {
@@ -38,7 +39,7 @@ export default function ContactLinks() {
     setSaving(true);
     const { error } = await saveContactLinks(links);
     setSaving(false);
-    if (error) return toast.error(error.message || 'فشل الحفظ');
+    if (error) return toast.error(getFriendlyError(error, 'فشل الحفظ'));
     toast.success('تم تحديث روابط التواصل — الموقع كله اتحدث فوراً');
   };
 

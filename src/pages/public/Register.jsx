@@ -11,6 +11,7 @@ import { signUpStudent } from '../../lib/auth.js';
 import { GRADES_OPTIONS } from '../../config/constants.js';
 import { validateEmail, validatePassword, validatePhone, validateName } from '../../utils/validators.js';
 import { isSupabaseConfigured } from '../../lib/supabaseClient.js';
+import { getFriendlyError } from '../../utils/errors.js';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -55,7 +56,7 @@ export default function Register() {
       if (error.message?.toLowerCase().includes('already registered')) {
         setErrors({ email: 'هذا الإيميل مسجل بالفعل' });
       } else {
-        toast.error(error.message || 'فشل التسجيل');
+        toast.error(getFriendlyError(error, 'فشل التسجيل'));
       }
       return;
     }

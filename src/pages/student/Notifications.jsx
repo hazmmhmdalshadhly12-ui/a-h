@@ -32,7 +32,7 @@ export default function Notifications() {
           <Skeleton className="h-16" />
         </div>
       ) : notifications.length === 0 ? (
-        <EmptyState icon="notifications" title="لا توجد إشعارات" description="هنبعتلك إشعارات عند نشر الدرجات وتأكيد الحجز." />
+        <EmptyState icon="notifications" title="لا توجد إشعارات" description="هنبعتلك إشعارات عند نشر الدرجات وتأكيد اشتراكك الشهري." />
       ) : (
         <div className="space-y-3">
           {notifications.map((n) => (

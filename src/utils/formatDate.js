@@ -19,6 +19,16 @@ export function formatDate(value, { withTime = false } = {}) {
   return `${datePart} - ${timePart}`;
 }
 
+/** تنسيق شهر بصيغة "YYYY-MM" → اسم الشهر والسنة بالعربي */
+export function formatMonth(value) {
+  if (!value) return '—';
+  const m = String(value).match(/^(\d{4})-(\d{2})$/);
+  if (!m) return value;
+  const date = new Date(Number(m[1]), Number(m[2]) - 1, 1);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('ar-EG', { month: 'long', year: 'numeric' }).format(date);
+}
+
 export function formatDateTime(value) {
   return formatDate(value, { withTime: true });
 }
