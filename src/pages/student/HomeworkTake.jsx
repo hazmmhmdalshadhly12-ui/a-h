@@ -42,9 +42,9 @@ export default function HomeworkTake() {
       return toast.error('جاوب على كل الأسئلة الأول');
     }
     setSubmitting(true);
-    const { data, error: e } = await submitHomework(homeworkId, answers);
+    const { data, error: submitErr } = await submitHomework(homeworkId, answers);
     setSubmitting(false);
-    if (e) return toast.error(getFriendlyError(e, 'فشل تسليم الواجب'));
+    if (submitErr) return toast.error(getFriendlyError(submitErr, 'فشل تسليم الواجب'));
     setResult(data);
     toast.success('تم تسليم الواجب — اتصلح آلياً');
   };
