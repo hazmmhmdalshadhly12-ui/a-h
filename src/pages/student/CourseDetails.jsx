@@ -13,6 +13,15 @@ import { fetchCourseLessons, fetchCourseHomeworks } from '../../services/courseS
 import { GRADE_SHORT } from '../../config/site.js';
 import { cn } from '../../lib/utils.js';
 
+/** يحوّل أي رابط يوتيوب (watch / youtu.be / shorts) لصيغة embed الصالحة للتضمين */
+function toEmbedUrl(url) {
+  if (!url) return '';
+  if (url.includes('/embed/')) return url;
+  const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+  if (match) return `https://www.youtube.com/embed/${match[1]}`;
+  return url;
+}
+
 export default function CourseDetails() {
   const { courseId } = useParams();
   const { course, loading } = useCourse(courseId);
@@ -59,7 +68,7 @@ export default function CourseDetails() {
   const isMyGrade = profile?.grade === course.grade;
   const canWatch = Boolean(profile) && isMyGrade;
   const activeLesson = lessons.find((l) => l.lesson_id === activeLessonId);
-  const videoUrl = activeLesson?.video_url || course.video_url;
+  const videoUrl = toEmbedUrl(activeLesson?.video_url || course.video_url);
 
   return (
     <SubscriptionGate>
