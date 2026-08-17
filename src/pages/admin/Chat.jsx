@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAdminChat } from '../../hooks/useChat.js';
 import AdminHeader from '../../components/admin/AdminHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Icon from '../../components/ui/Icon.jsx';
+import Button from '../../components/ui/Button.jsx';
 import ChatBubble from '../../components/chat/ChatBubble.jsx';
 import ChatComposer from '../../components/chat/ChatComposer.jsx';
 import Skeleton from '../../components/ui/Skeleton.jsx';
@@ -13,6 +14,7 @@ import { GRADES } from '../../config/site.js';
 import { getFriendlyError } from '../../utils/errors.js';
 import { useToast } from '../../components/ui/Toast.jsx';
 import { cn } from '../../lib/utils.js';
+import { fetchAllStudents } from '../../services/profileService.js';
 
 /** تقسيم الرسائل لمجموعات حسب اليوم — زي واتساب */
 function groupByDay(messages) {
@@ -42,6 +44,10 @@ export default function Chat() {
   const studentParam = searchParams.get('student') || null;
   const { profile } = useAuth();
   const toast = useToast();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [students, setStudents] = useState([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentSearch, setStudentSearch] = useState('');
   const { conversations, activeId, setActiveId, messages, loading, sending, send, remove, openStudentChat, openError } =
     useAdminChat(studentParam);
   const bottomRef = useRef(null);
@@ -75,6 +81,31 @@ export default function Chat() {
     if (error) toast.error(getFriendlyError(error, 'فشل فتح المحادثة'));
   };
 
+  const togglePicker = async () => {
+    const next = !pickerOpen;
+    setPickerOpen(next);
+    if (next && students.length === 0) {
+      setStudentsLoading(true);
+      const { data, error } = await fetchAllStudents();
+      setStudents(Array.isArray(data) ? data : []);
+      if (error) toast.error(getFriendlyError(error, 'فشل تحميل الطلاب'));
+      setStudentsLoading(false);
+    }
+  };
+
+  const startChatWith = (student) => {
+    setPickerOpen(false);
+    setStudentSearch('');
+    openChat(student.id);
+  };
+
+  const filteredStudents = students.filter(
+    (s) =>
+      !studentSearch ||
+      s.full_name?.toLowerCase().includes(studentSearch.toLowerCase()) ||
+      s.phone?.includes(studentSearch)
+  );
+
   const dayLabel = (key) => {
     const today = new Date().toDateString();
     const yesterday = new Date(Date.now() - 86400000).toDateString();
@@ -98,9 +129,54 @@ export default function Chat() {
       <div className="grid gap-5 lg:grid-cols-3">
         {/* قائمة المحادثات */}
         <Card className="overflow-hidden lg:col-span-1">
-          <div className="border-b border-ink-600 px-4 py-3">
+          <div className="flex items-center justify-between gap-2 border-b border-ink-600 px-4 py-3">
             <p className="font-display text-sm font-bold text-paper">المحادثات ({conversations.length})</p>
+            <Button size="sm" variant="secondary" onClick={togglePicker}>
+              <Icon name="plus" className="h-3.5 w-3.5" /> محادثة جديدة
+            </Button>
           </div>
+
+          {pickerOpen && (
+            <div className="border-b border-ink-700 bg-ink-800/60 p-3">
+              <input
+                type="search"
+                value={studentSearch}
+                onChange={(e) => setStudentSearch(e.target.value)}
+                placeholder="ابحث بالاسم أو رقم الهاتف..."
+                className="focus-ring w-full rounded-lens border border-ink-600 bg-ink-900 px-3 py-2 text-sm text-paper placeholder:text-muted"
+              />
+              <div className="mt-2 max-h-48 overflow-y-auto">
+                {studentsLoading ? (
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-9" />
+                    <Skeleton className="h-9" />
+                  </div>
+                ) : filteredStudents.length === 0 ? (
+                  <p className="py-3 text-center text-xs text-muted">لا يوجد طلاب مطابقون.</p>
+                ) : (
+                  filteredStudents.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => startChatWith(s)}
+                      className="focus-ring flex w-full items-center gap-2.5 rounded-lens px-2 py-2 text-right transition hover:bg-ink-700/60"
+                    >
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-signal/15 font-display text-xs font-bold text-signal">
+                        {(s.full_name || 'ط').slice(0, 1)}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-paper">{s.full_name || 'طالب'}</span>
+                        <span className="block truncate text-[11px] text-muted">
+                          {GRADES[s.grade] || ''}
+                          {s.phone ? ` • ${s.phone}` : ''}
+                        </span>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
           <div className="max-h-[60vh] overflow-y-auto">
             {loading ? (
               <div className="space-y-2 p-4">
