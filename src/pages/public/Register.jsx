@@ -38,6 +38,12 @@ function translateAuthError(error) {
   if (msg.includes('over email send rate limit')) {
     return { form: 'لينكات التفعيل اتتبعتت كتير — استنى دقيقة وحاول تاني' };
   }
+  // أشهر سبب خفي: فشل الـ trigger اللي بيعمل البروفايل على قاعدة البيانات
+  if (msg.includes('database error') || msg.includes('database error saving new user')) {
+    return {
+      form: 'حصلت مشكلة تقنية في إنشاء البروفايل على السيرفر — تأكد إن كل أكواد SQL اشتغلت بالترتيب (001 → 015) أو راسل الأدمن'
+    };
+  }
   return null;
 }
 
@@ -83,6 +89,7 @@ export default function Register() {
     if (error) {
       // سجّل الخطأ الفعلي للتحقق (من غير ما يظهر للمستخدم أي تفاصيل)
       console.error('[Register] signUp error:', error);
+      console.error('[Register] signUp status:', error?.status, '| code:', error?.code);
 
       const translated = translateAuthError(error);
       if (translated?.email) {
@@ -92,7 +99,13 @@ export default function Register() {
       } else if (translated?.form) {
         setErrors({ form: translated.form });
       } else {
-        toast.error(getFriendlyError(error, 'فشل التسجيل — تأكد من البيانات أو حاول مرة أخرى'));
+        // عرض مؤقت لرقم الخطأ (آمن — مجرد status/code) عشان نشخّص المشكلة
+        const tag = error?.status || error?.code;
+        toast.error(
+          tag
+            ? `فشل التسجيل (${tag}) — جرّب مرة أخرى أو راسل الأدمن`
+            : 'فشل التسجيل — تأكد من البيانات أو حاول مرة أخرى'
+        );
       }
       return;
     }
