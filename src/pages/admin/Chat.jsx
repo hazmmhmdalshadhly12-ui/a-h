@@ -16,7 +16,7 @@ import { cn } from '../../lib/utils.js';
 export default function Chat() {
   const { profile } = useAuth();
   const toast = useToast();
-  const { conversations, activeId, setActiveId, messages, loading, sending, send } = useAdminChat();
+  const { conversations, activeId, setActiveId, messages, loading, sending, send, remove } = useAdminChat();
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -28,6 +28,11 @@ export default function Chat() {
   const handleSend = async (text) => {
     const { error: sendError } = await send(text);
     if (sendError) toast.error(getFriendlyError(sendError, 'فشل إرسال الرسالة، حاول مرة أخرى'));
+  };
+
+  const handleDelete = async (messageId) => {
+    const { error: delError } = await remove(messageId);
+    if (delError) toast.error(getFriendlyError(delError, 'فشل حذف الرسالة'));
   };
 
   return (
@@ -116,7 +121,13 @@ export default function Chat() {
                   <p className="py-10 text-center text-sm text-muted">لا توجد رسائل بعد — ابدأ الرد.</p>
                 ) : (
                   messages.map((m) => (
-                    <ChatBubble key={m.id} message={m} mine={m.sender_id === profile?.id} />
+                    <ChatBubble
+                      key={m.id}
+                      message={m}
+                      mine={m.sender_id === profile?.id}
+                      deletable
+                      onDelete={handleDelete}
+                    />
                   ))
                 )}
                 <div ref={bottomRef} />
