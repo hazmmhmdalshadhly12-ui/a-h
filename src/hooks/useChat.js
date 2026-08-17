@@ -5,7 +5,8 @@ import {
   fetchMessages,
   sendMessage,
   markConversationRead,
-  fetchAllConversations
+  fetchAllConversations,
+  deleteMessage
 } from '../services/chatService.js';
 
 /** شات الطالب مع المعلم — بيدير المحادثة الوحيدة بتاعته */
@@ -70,7 +71,18 @@ export function useStudentChat() {
     [conversationId, profile?.id]
   );
 
-  return { conversationId, messages, loading, sending, error, send, reload: load };
+  const remove = useCallback(
+    async (messageId) => {
+      const { error } = await deleteMessage(messageId);
+      if (!error) {
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      }
+      return { error };
+    },
+    []
+  );
+
+  return { conversationId, messages, loading, sending, error, send, remove, reload: load };
 }
 
 /** شات الأدمن — كل المحادثات مع الطلاب + الرسائل */
@@ -126,5 +138,16 @@ export function useAdminChat() {
     [activeId, profile?.id, loadConversations]
   );
 
-  return { conversations, activeId, setActiveId, messages, loading, sending, send };
+  const remove = useCallback(
+    async (messageId) => {
+      const { error } = await deleteMessage(messageId);
+      if (!error) {
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      }
+      return { error };
+    },
+    []
+  );
+
+  return { conversations, activeId, setActiveId, messages, loading, sending, send, remove };
 }
