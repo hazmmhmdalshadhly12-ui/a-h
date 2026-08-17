@@ -18,7 +18,7 @@
 -- ------------------------------------------------------------
 create or replace function public.get_exam_questions(p_exam_id uuid)
 returns table (
-  id uuid,
+  question_id uuid,
   exam_id uuid,
   question_text text,
   type text,
@@ -52,7 +52,7 @@ begin
   end if;
 
   return query
-    select q.id as id, q.exam_id, q.question_text, q.type, q.options, q.points, q.order_index
+    select q.id::uuid as question_id, q.exam_id, q.question_text, q.type, q.options, q.points, q.order_index
     from public.exam_questions q
     where q.exam_id = p_exam_id
     order by q.order_index asc;
