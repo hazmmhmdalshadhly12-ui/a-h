@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
 import PublicLayout from '../../components/layout/PublicLayout.jsx';
 import VisionCore from '../../components/vision/VisionCore.jsx';
+import VisionV from '../../components/vision/VisionV.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Icon from '../../components/ui/Icon.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -81,7 +82,7 @@ export default function Home() {
 
           <div className="relative hidden justify-center lg:flex">
             <div className="absolute h-72 w-72 rounded-full bg-signal/15 blur-[90px]" />
-            <VisionCore size={380} className="drop-shadow-[0_0_40px_rgba(245,183,65,0.25)]" />
+            <VisionV size={380} className="drop-shadow-[0_0_40px_rgba(34,211,238,0.3)]" />
           </div>
         </div>
       </section>
