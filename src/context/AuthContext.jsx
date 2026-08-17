@@ -12,35 +12,57 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const refreshProfile = useCallback(async () => {
+  const refreshProfile = useCallback(async (opts = {}) => {
     const { data } = await getSession();
     const user = data?.session?.user;
     if (!user) {
       setProfile(null);
       return null;
     }
-    const res = await fetchProfile(user.id);
-    if (res?.data) setProfile(res.data);
-    return res?.data ?? null;
+
+    // محاولات متكررة لو جلب البروفايل فشل مؤقتاً (شبكة / RLS مش سريع)
+    // عشان منطلعش المستخدم على 403 بالخطأ بعد الرفرش.
+    const attempts = opts.attempts ?? 3;
+    let lastRes = null;
+    for (let i = 0; i < attempts; i++) {
+      lastRes = await fetchProfile(user.id);
+      if (lastRes?.data) break;
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 400));
+    }
+
+    if (lastRes?.data) setProfile(lastRes.data);
+    return lastRes?.data ?? null;
   }, []);
 
   useEffect(() => {
     let active = true;
-    getSession().then(({ data }) => {
+
+    // نستنى الـ profile يكمل تحميله قبل ما نوقف الـ loading
+    // عشان الروتور ميشوفش profile=null ويعمل redirect لـ /403 (ممنوع الوصول) بالخطأ
+    const finishAuth = async () => {
+      const { data } = await getSession();
       if (!active) return;
       setSession(data.session);
-      if (data.session?.user) refreshProfile();
-      setLoading(false);
-    });
-
-    const { data: sub } = onAuthStateChange((_event, nextSession) => {
-      if (!active) return;
-      setSession(nextSession);
-      if (nextSession?.user) {
-        refreshProfile();
+      if (data.session?.user) {
+        await refreshProfile();
       } else {
         setProfile(null);
       }
+      if (!active) return;
+      setLoading(false);
+    };
+
+    finishAuth();
+
+    const { data: sub } = onAuthStateChange(async (_event, nextSession) => {
+      if (!active) return;
+      setSession(nextSession);
+      if (nextSession?.user) {
+        await refreshProfile();
+      } else {
+        setProfile(null);
+      }
+      if (!active) return;
       setLoading(false);
     });
 

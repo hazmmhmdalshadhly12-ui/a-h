@@ -2,8 +2,8 @@ import DataTable from './DataTable.jsx';
 import Badge from '../ui/Badge.jsx';
 import Button from '../ui/Button.jsx';
 import { BOOKING_STATUSES } from '../../config/constants.js';
-import { formatDateTime } from '../../utils/formatDate.js';
-import { SUBJECTS } from '../../config/site.js';
+import { formatMonth } from '../../utils/formatDate.js';
+import { GRADES } from '../../config/site.js';
 
 export default function BookingTable({ bookings, onUpdateStatus }) {
   const columns = [
@@ -12,17 +12,22 @@ export default function BookingTable({ bookings, onUpdateStatus }) {
       label: 'الطالب',
       render: (b) => (
         <div>
-          <p className="font-semibold text-paper">{b.profiles?.full_name || '—'}</p>
-          <p className="text-xs text-muted" dir="ltr">{b.profiles?.phone || ''}</p>
+          <p className="font-semibold text-paper">{b.full_name || b.profiles?.full_name || '—'}</p>
+          <p className="text-xs text-muted" dir="ltr">{b.phone || b.profiles?.phone || ''}</p>
+          {b.parent_phone && <p className="text-xs text-muted" dir="ltr">ولي الأمر: {b.parent_phone}</p>}
         </div>
       )
     },
     {
-      key: 'datetime',
-      label: 'الميعاد',
-      render: (b) => <span className="text-paper/90">{formatDateTime(b.requested_datetime)}</span>
+      key: 'grade',
+      label: 'الصف',
+      render: (b) => <span className="text-paper/90">{GRADES[b.grade || b.profiles?.grade] || b.grade || '—'}</span>
     },
-    { key: 'subject', label: 'المادة', render: (b) => SUBJECTS[b.subject] || b.subject },
+    {
+      key: 'month',
+      label: 'شهر الحجز',
+      render: (b) => <span className="text-paper/90">{formatMonth(b.month)}</span>
+    },
     {
       key: 'status',
       label: 'الحالة',

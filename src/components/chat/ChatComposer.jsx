@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import Icon from '../ui/Icon.jsx';
 
-export default function ChatInput({ onSend, disabled, placeholder = 'اسألني عن الاشتراك، الامتحانات، الكورسات...' }) {
+/** حقل إدخال رسالة شات مع زرار إرسال */
+export default function ChatComposer({ onSend, disabled, placeholder = 'اكتب رسالتك...' }) {
   const [text, setText] = useState('');
 
   const submit = () => {
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
-    onSend(trimmed);
+    onSend?.(trimmed);
     setText('');
   };
 

@@ -3,7 +3,7 @@ import ChatMessage from './ChatMessage.jsx';
 import ChatInput from './ChatInput.jsx';
 import Icon from '../ui/Icon.jsx';
 
-const SUGGESTIONS = ['إزاي أحجز حصة؟', 'امتى الامتحان الجاي؟', 'إيه أرقام التواصل؟', 'إيه الكورسات المتاحة؟'];
+const SUGGESTIONS = ['إزاي أسجل اشتراك شهري؟', 'امتى الامتحان الجاي؟', 'إيه أرقام التواصل؟', 'إيه الكورسات المتاحة؟'];
 
 export default function ChatWindow({ messages, loading, onClose, onSend }) {
   const bottomRef = useRef(null);
@@ -35,7 +35,7 @@ export default function ChatWindow({ messages, loading, onClose, onSend }) {
           <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-stream">
             <Icon name="eye" className="h-3.5 w-3.5" /> Vision AI
           </div>
-          أهلاً بيك، أنا مساعد Vision Academy. أسألني عن الحجز، الامتحانات، الكورسات، أو المسابقات.
+          أهلاً بيك، أنا مساعد Vision Academy. أسألني عن الاشتراك الشهري، الامتحانات، الكورسات، أو المسابقات.
         </div>
 
         {messages.map((m, i) => (
@@ -67,7 +67,7 @@ export default function ChatWindow({ messages, loading, onClose, onSend }) {
         <div ref={bottomRef} />
       </div>
 
-      <ChatInput onSend={onSend} disabled={loading} />
+      <ChatInput onSend={onSend} disabled={loading} placeholder="اسألني عن الاشتراك، الامتحانات، الكورسات..." />
     </div>
   );
 }

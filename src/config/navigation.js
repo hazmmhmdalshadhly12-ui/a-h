@@ -12,6 +12,7 @@ export const STUDENT_NAV = [
   { label: 'درجاتي', path: '/student/grades', icon: 'grades' },
   { label: 'الحجوزات', path: '/student/bookings', icon: 'bookings' },
   { label: 'المسابقات', path: '/student/competitions', icon: 'competitions' },
+  { label: 'التواصل مع المعلم', path: '/student/chat', icon: 'chat' },
   { label: 'الإشعارات', path: '/student/notifications', icon: 'notifications' }
 ];
 
@@ -23,7 +24,8 @@ export const ADMIN_NAV = [
       { label: 'الامتحانات', path: '/admin/exams', icon: 'exams' },
       { label: 'الكورسات', path: '/admin/courses', icon: 'courses' },
       { label: 'الحجوزات', path: '/admin/bookings', icon: 'bookings' },
-      { label: 'المسابقات', path: '/admin/competitions', icon: 'competitions' }
+      { label: 'المسابقات', path: '/admin/competitions', icon: 'competitions' },
+      { label: 'الشات مع الطلاب', path: '/admin/chat', icon: 'chat' }
     ]
   },
   {
