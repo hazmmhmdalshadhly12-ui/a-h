@@ -53,7 +53,14 @@ export async function fetchExamQuestionsForStudent(examId) {
     console.error('[fetchExamQuestionsForStudent] error:', error);
     return { data: [], error };
   }
-  return { data: data || [], error: null };
+  // الدالة بترجع العمود question_id (عشان نتجنب تصادم أسماء في plpgsql) —
+  // بنحوّله لـ id هنا عشان باقي الكود شغال على q.id
+  const mapped = (data || []).map((q) => ({
+    ...q,
+    id: q.question_id,
+    question_id: undefined
+  }));
+  return { data: mapped, error: null };
 }
 
 // ===== واجهة الأدمن =====
