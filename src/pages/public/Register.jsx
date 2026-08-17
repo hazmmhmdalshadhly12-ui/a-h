@@ -83,39 +83,53 @@ export default function Register() {
     }
 
     setLoading(true);
-    const { data, error } = await signUpStudent(form);
-    setLoading(false);
 
-    if (error) {
-      // سجّل الخطأ الفعلي للتحقق (من غير ما يظهر للمستخدم أي تفاصيل)
-      console.error('[Register] signUp error:', error);
-      console.error('[Register] signUp status:', error?.status, '| code:', error?.code);
+    // مهلة أمان: لو الطلب علّق (نت) نوقف التحميل ونقول للمستخدم
+    const timeout = new Promise((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { status: 'TIMEOUT', message: 'timeout' } }), 20000)
+    );
 
-      const translated = translateAuthError(error);
-      if (translated?.email) {
-        setErrors({ email: translated.email });
-      } else if (translated?.password) {
-        setErrors({ password: translated.password });
-      } else if (translated?.form) {
-        setErrors({ form: translated.form });
-      } else {
-        // عرض مؤقت لرقم الخطأ (آمن — مجرد status/code) عشان نشخّص المشكلة
-        const tag = error?.status || error?.code;
-        toast.error(
-          tag
-            ? `فشل التسجيل (${tag}) — جرّب مرة أخرى أو راسل الأدمن`
-            : 'فشل التسجيل — تأكد من البيانات أو حاول مرة أخرى'
-        );
+    try {
+      const { data, error } = await Promise.race([signUpStudent(form), timeout]);
+      setLoading(false);
+
+      if (error) {
+        // سجّل الخطأ الفعلي للتحقق (من غير ما يظهر للمستخدم أي تفاصيل)
+        console.error('[Register] signUp error:', error);
+        console.error('[Register] signUp status:', error?.status, '| code:', error?.code);
+
+        const translated = translateAuthError(error);
+        if (translated?.email) {
+          setErrors({ email: translated.email });
+        } else if (translated?.password) {
+          setErrors({ password: translated.password });
+        } else if (translated?.form) {
+          setErrors({ form: translated.form });
+        } else if (error?.status === 'TIMEOUT') {
+          toast.error('الاتصال استغرق وقت أطول من المعتاد — تأكد من الإنترنت وحاول مرة أخرى');
+        } else {
+          // عرض مؤقت لرقم الخطأ (آمن — مجرد status/code) عشان نشخّص المشكلة
+          const tag = error?.status || error?.code;
+          toast.error(
+            tag
+              ? `فشل التسجيل (${tag}) — جرّب مرة أخرى أو راسل الأدمن`
+              : 'فشل التسجيل — تأكد من البيانات أو حاول مرة أخرى'
+          );
+        }
+        return;
       }
-      return;
-    }
 
-    if (data?.session) {
-      toast.success('تم إنشاء حسابك');
-      navigate('/student/dashboard', { replace: true });
-    } else {
-      // لو تفعيل الإيميل شغال في Supabase — بيقوله يتفقد الإيميل
-      setNeedConfirm(true);
+      if (data?.session) {
+        toast.success('تم إنشاء حسابك');
+        navigate('/student/dashboard', { replace: true });
+      } else {
+        // لو تفعيل الإيميل شغال في Supabase — بيقوله يتفقد الإيميل
+        setNeedConfirm(true);
+      }
+    } catch (err) {
+      setLoading(false);
+      console.error('[Register] signUp threw:', err);
+      toast.error('حصلت مشكلة غير متوقعة في التسجيل — حاول مرة أخرى أو راسل الأدمن');
     }
   };
 
