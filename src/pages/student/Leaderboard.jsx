@@ -44,7 +44,9 @@ export default function Leaderboard() {
           <Skeleton className="h-14" />
         </div>
       ) : error ? (
-        <Card className="text-center text-sm text-danger">حصلت مشكلة في تحميل اللوحة — حاول مرة أخرى.</Card>
+        <Card className="text-center text-sm text-danger">
+          حصلت مشكلة في تحميل اللوحة — {error?.message || 'حاول مرة أخرى.'}
+        </Card>
       ) : rows.length === 0 ? (
         <EmptyState
           icon="🏆"
