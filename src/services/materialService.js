@@ -2,6 +2,14 @@ import { supabase } from '../lib/supabaseClient.js';
 
 const BUCKET = 'materials';
 
+/** الامتدادات الآمنة للرفع (بتحمي من ملفات SVG/HTML الخبيثة = XSS) */
+const ALLOWED_EXTENSIONS = [
+  'pdf', 'png', 'jpg', 'jpeg', 'jfif', 'webp', 'gif',
+  'mp4', 'm4v', 'mov', 'zip', 'rar', '7z',
+  'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  'txt', 'csv', 'mp3', 'wav', 'ogg'
+];
+
 /** كل ملفات مكتبة المذكرات (بترتيب الأحدث أولاً) — اختياري فلتر بالصف */
 export async function fetchMaterials(grade) {
   let q = supabase.from('materials').select('*').order('created_at', { ascending: false });
@@ -40,6 +48,9 @@ export async function uploadMaterial({ title, description, grade, file }) {
   if (!title?.trim() || !grade || !file) return { data: null, error: { message: 'اكتب العنوان واختار الصف والملف' } };
 
   const ext = (file.name.split('.').pop() || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    return { data: null, error: { message: 'نوع الملف غير مسموح — PDF/صور/فيديو/وثائق/ملفات مضغوطة فقط (ممنوع HTML وSVG لأمان الموقع)' } };
+  }
   const safeExt = ext ? `.${ext}` : '';
   const path = `${grade}/${Date.now()}_${Math.random().toString(36).slice(2)}${safeExt}`;
 

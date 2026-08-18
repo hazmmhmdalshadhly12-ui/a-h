@@ -120,10 +120,21 @@ export async function deleteCourseFile(fileId) {
 
 const FILES_BUCKET = 'course-files';
 
+/** الامتدادات الآمنة للرفع (بتحمي من ملفات SVG/HTML الخبيثة = XSS) */
+const ALLOWED_EXTENSIONS = [
+  'pdf', 'png', 'jpg', 'jpeg', 'jfif', 'webp', 'gif',
+  'mp4', 'm4v', 'mov', 'zip', 'rar', '7z',
+  'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  'txt', 'csv', 'mp3', 'wav', 'ogg'
+];
+
 /** يرفع ملف لـ Storage ويرجع الـ public URL */
 export async function uploadCourseFile(file, { courseId, studentId }) {
   if (!file || !courseId) return { data: null, error: { message: 'بيانات ناقصة' } };
   const ext = (file.name || '').split('.').pop()?.toLowerCase();
+  if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    return { data: null, error: { message: 'نوع الملف غير مسموح — PDF/صور/فيديو/وثائق/ملفات مضغوطة فقط (ممنوع HTML وSVG لأمان الموقع)' } };
+  }
   const isPdf = ext === 'pdf';
   const isZip = ext === 'zip';
   const fileType = isPdf ? 'pdf' : isZip ? 'zip' : 'file';
