@@ -50,8 +50,9 @@ export function useCourse(courseId, grade) {
     if (!courseId) return;
     let active = true;
 
-    // للكورس الاحترافي: بيجيب الكورس كامل مع السعر وحالة accessibility حتى لو مش مشترك
-    if (grade === 'professional') {
+    // للطلاب: بنجيب الكورسات كاملة عبر get_student_courses (يدعم الاحترافي لكل الصفوف
+    // مع السعر وحالة accessibility حتى لو مش مشترك في الكورس)
+    if (grade) {
       fetchStudentCourses(grade).then(({ data }) => {
         if (active) {
           const found = Array.isArray(data) ? data.find((c) => (c.course_id || c.id) === courseId) : null;

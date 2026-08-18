@@ -16,6 +16,11 @@ export const STUDENT_NAV = [
   { label: 'الإشعارات', path: '/student/notifications', icon: 'notifications' }
 ];
 
+export const PARENT_NAV = [
+  { label: 'أولادي', path: '/parent/dashboard', icon: 'dashboard' },
+  { label: 'تواصل مع المعلم', path: '/parent/chat', icon: 'chat' }
+];
+
 export const ADMIN_NAV = [
   {
     section: 'الإدارة',
