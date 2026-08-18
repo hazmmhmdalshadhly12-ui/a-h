@@ -114,7 +114,8 @@ export default function CourseDetails() {
   const isMyGrade = profile?.grade === course.grade;
   // الاحترافي: الوصول الرسمي من get_student_courses (accessible) — للمشترك من غير محتوى لسه
   const effectiveAccess = canAccess || Boolean(course?.accessible);
-  const canWatch = Boolean(profile) && isMyGrade && effectiveAccess;
+  // الكورس الاحترافي متاح للمشترك فيه من أي صف (أولى/تانية يقدر يشترك ويشاهد)
+  const canWatch = Boolean(profile) && effectiveAccess && (isProfessional || isMyGrade);
   const activeLesson = lessons.find((l) => l.lesson_id === activeLessonId);
   const videoUrl = toEmbedUrl(activeLesson?.video_url || course.video_url);
   const instagram = PAYMENT_INFO.instagramNumber;

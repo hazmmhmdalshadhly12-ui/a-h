@@ -36,9 +36,11 @@ export default function Login() {
       return;
     }
 
-    // بعد الدخول بنجيب البروفايل ونحوله للمسار الصح
+    // بعد الدخول بنجيب البروفايل ونحوله للمسار الصح (أدمن / ولي أمر / طالب)
     const profile = await refreshProfile();
-    navigate(profile?.role === 'admin' ? '/admin' : '/student/dashboard', { replace: true });
+    const target =
+      profile?.role === 'admin' ? '/admin' : profile?.role === 'parent' ? '/parent/dashboard' : '/student/dashboard';
+    navigate(target, { replace: true });
   };
 
   return (

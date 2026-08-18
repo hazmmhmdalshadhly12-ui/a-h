@@ -11,8 +11,13 @@ export function canAccessStudent(profile) {
   return Boolean(profile?.id && (profile?.role === 'student' || profile?.role === 'admin'));
 }
 
+export function canAccessParent(profile) {
+  return Boolean(profile?.role === 'parent');
+}
+
 export function requireRole(profile, role) {
   if (role === 'admin') return canAccessAdmin(profile);
   if (role === 'student') return canAccessStudent(profile);
+  if (role === 'parent') return canAccessParent(profile);
   return Boolean(profile?.id);
 }

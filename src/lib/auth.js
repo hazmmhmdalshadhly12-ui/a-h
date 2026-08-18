@@ -4,7 +4,7 @@ import { supabase } from './supabaseClient.js';
  * تسجيل طالب جديد — ملف البروفايل بيتعمل تلقائياً من Trigger في قاعدة البيانات
  * باستخدام الـ metadata اللي اتبعتت هنا.
  */
-export async function signUpStudent({ fullName, email, password, phone, parentPhone, grade }) {
+export async function signUpStudent({ fullName, email, password, phone, parentPhone, grade, role }) {
   return supabase.auth.signUp({
     email: email.trim(),
     password,
@@ -13,7 +13,8 @@ export async function signUpStudent({ fullName, email, password, phone, parentPh
         full_name: fullName,
         phone: phone || null,
         parent_phone: parentPhone || null,
-        grade: grade || 'first_secondary'
+        grade: grade || 'first_secondary',
+        role: role || 'student'
       }
     }
   });

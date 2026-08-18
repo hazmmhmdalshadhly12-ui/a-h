@@ -9,6 +9,7 @@ import Register from '../pages/public/Register.jsx';
 
 import StudentRoute from './StudentRoute.jsx';
 import AdminRoute from './AdminRoute.jsx';
+import ParentRoute from './ParentRoute.jsx';
 
 import StudentLayout from '../pages/student/StudentLayout.jsx';
 import Dashboard from '../pages/student/Dashboard.jsx';
@@ -24,6 +25,10 @@ import CompetitionDetails from '../pages/student/CompetitionDetails.jsx';
 import Notifications from '../pages/student/Notifications.jsx';
 import Profile from '../pages/student/Profile.jsx';
 import StudentChat from '../pages/student/Chat.jsx';
+
+import ParentLayout from '../pages/parent/ParentLayout.jsx';
+import ParentDashboard from '../pages/parent/Dashboard.jsx';
+import ParentStudentDetails from '../pages/parent/StudentDetails.jsx';
 
 import AdminLayout from '../pages/admin/AdminLayout.jsx';
 import AdminDashboard from '../pages/admin/Dashboard.jsx';
@@ -85,6 +90,21 @@ export default function AppRoutes() {
         <Route path="notifications" element={<Notifications />} />
         <Route path="chat" element={<StudentChat />} />
         <Route path="profile" element={<Profile />} />
+      </Route>
+
+      {/* بوابة ولي الأمر */}
+      <Route
+        path="/parent"
+        element={
+          <ParentRoute>
+            <ParentLayout />
+          </ParentRoute>
+        }
+      >
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<ParentDashboard />} />
+        <Route path="students/:studentId" element={<ParentStudentDetails />} />
+        <Route path="chat" element={<StudentChat />} />
       </Route>
 
       {/* لوحة تحكم الأدمن — محمية بالصلاحية من السيرفر أيضاً */}
