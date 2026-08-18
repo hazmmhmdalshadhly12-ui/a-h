@@ -1,0 +1,27 @@
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    # كل 5 ساعات
+    - cron: '0 */5 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping auth health endpoint (من غير مفتاح)
+        run: |
+          curl -s -o /dev/null -w "health: %{http_code}\n" \
+            https://yvkjqdmitwouluiqkuvv.supabase.co/auth/v1/health || true
+
+      - name: Ping REST endpoint (بالمفتاح لو متظبط)
+        env:
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -n "$SUPABASE_ANON_KEY" ]; then
+            curl -s -o /dev/null -w "rest: %{http_code}\n" \
+              -H "apikey: $SUPABASE_ANON_KEY" \
+              -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+              "https://yvkjqdmitwouluiqkuvv.supabase.co/rest/v1/" || true
+          fi
