@@ -13,6 +13,7 @@ export const STUDENT_NAV = [
   { label: 'الحجوزات', path: '/student/bookings', icon: 'bookings' },
   { label: 'المسابقات', path: '/student/competitions', icon: 'competitions' },
   { label: 'لوحة التفوق', path: '/student/leaderboard', icon: 'grades' },
+  { label: 'المذكرات', path: '/student/materials', icon: 'download' },
   { label: 'التواصل مع المعلم', path: '/student/chat', icon: 'chat' },
   { label: 'الإشعارات', path: '/student/notifications', icon: 'notifications' }
 ];
@@ -30,6 +31,7 @@ export const ADMIN_NAV = [
       { label: 'الامتحانات', path: '/admin/exams', icon: 'exams' },
       { label: 'الكورسات', path: '/admin/courses', icon: 'courses' },
       { label: 'أقسام الكورسات', path: '/admin/sections', icon: 'courses' },
+      { label: 'المذكرات والملفات', path: '/admin/materials', icon: 'download' },
       { label: 'الحجوزات', path: '/admin/bookings', icon: 'bookings' },
       { label: 'المسابقات', path: '/admin/competitions', icon: 'competitions' },
       { label: 'الإعلانات', path: '/admin/announcements', icon: 'notifications' },
