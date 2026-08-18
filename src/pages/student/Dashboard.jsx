@@ -1,17 +1,20 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import StatsCard from '../../components/academy/StatsCard.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 import Button from '../../components/ui/Button.jsx';
+import Icon from '../../components/ui/Icon.jsx';
 import Skeleton from '../../components/ui/Skeleton.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useAccess } from '../../hooks/useAccess.js';
 import { useExams } from '../../hooks/useExams.js';
 import { useBookings } from '../../hooks/useBookings.js';
 import { useNotifications } from '../../hooks/useNotifications.js';
+import { fetchAnnouncements } from '../../services/announcementService.js';
 import { GRADES } from '../../config/site.js';
 import { BOOKING_STATUSES } from '../../config/constants.js';
-import { formatDateTime, formatMonth } from '../../utils/formatDate.js';
+import { formatDateTime, formatMonth, formatDate } from '../../utils/formatDate.js';
 
 export default function Dashboard() {
   const { profile } = useAuth();
@@ -19,7 +22,16 @@ export default function Dashboard() {
   const { exams, loading: examsLoading } = useExams();
   const { bookings, loading: bookingsLoading } = useBookings();
   const { unreadCount } = useNotifications();
+  const [announcements, setAnnouncements] = useState([]);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(true);
   const isProfessional = profile?.grade === 'professional';
+
+  useEffect(() => {
+    fetchAnnouncements().then(({ data }) => {
+      setAnnouncements(data || []);
+      setAnnouncementsLoading(false);
+    });
+  }, []);
 
   const availableExams = exams.filter((e) => !e.submitted).length;
   const submittedExams = exams.filter((e) => e.submitted).length;
@@ -72,6 +84,36 @@ export default function Dashboard() {
           حل امتحان جديد
         </Link>
       </div>
+
+      {/* إعلانات المنصة */}
+      {!announcementsLoading && announcements.length > 0 && (
+        <Card className="border border-signal/30 bg-signal/5">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 font-display text-lg font-bold text-paper">
+              <Icon name="notifications" className="h-5 w-5 text-signal" />
+              إعلانات مهمة
+            </h2>
+            <Link to="/student/notifications" className="text-sm text-signal hover:text-signal-light">
+              كل الإعلانات ←
+            </Link>
+          </div>
+          <ul className="divide-y divide-ink-700/60">
+            {announcements.slice(0, 3).map((a) => (
+              <li key={a.id} className="flex items-start justify-between gap-3 py-2.5">
+                <div>
+                  <p className="flex items-center gap-1.5 text-sm font-bold text-paper">
+                    {a.is_pinned && <Icon name="pin" className="h-3.5 w-3.5 shrink-0 text-signal" />}
+                    {a.title}
+                  </p>
+                  {a.body && <p className="mt-0.5 text-sm text-muted">{a.body}</p>}
+                  <p className="mt-1 text-xs text-muted/70">{formatDate(a.created_at)}</p>
+                </div>
+                {a.is_pinned && <Badge color="signal">مهم</Badge>}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/* إحصائيات */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

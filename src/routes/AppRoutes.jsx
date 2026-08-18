@@ -23,6 +23,7 @@ import Bookings from '../pages/student/Bookings.jsx';
 import Competitions from '../pages/student/Competitions.jsx';
 import CompetitionDetails from '../pages/student/CompetitionDetails.jsx';
 import Notifications from '../pages/student/Notifications.jsx';
+import Leaderboard from '../pages/student/Leaderboard.jsx';
 import Profile from '../pages/student/Profile.jsx';
 import StudentChat from '../pages/student/Chat.jsx';
 
@@ -46,6 +47,7 @@ import AdminBookings from '../pages/admin/bookings/Bookings.jsx';
 import AdminCompetitions from '../pages/admin/competitions/Competitions.jsx';
 import CreateCompetition from '../pages/admin/competitions/CreateCompetition.jsx';
 import EditCompetition from '../pages/admin/competitions/EditCompetition.jsx';
+import AdminAnnouncements from '../pages/admin/announcements/Announcements.jsx';
 import AdminStudents from '../pages/admin/students/Students.jsx';
 import StudentDetails from '../pages/admin/students/StudentDetails.jsx';
 import ContactLinks from '../pages/admin/contacts/ContactLinks.jsx';
@@ -87,6 +89,7 @@ export default function AppRoutes() {
         <Route path="bookings" element={<Bookings />} />
         <Route path="competitions" element={<Competitions />} />
         <Route path="competitions/:id" element={<CompetitionDetails />} />
+        <Route path="leaderboard" element={<Leaderboard />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="chat" element={<StudentChat />} />
         <Route path="profile" element={<Profile />} />
@@ -131,6 +134,7 @@ export default function AppRoutes() {
         <Route path="competitions" element={<AdminCompetitions />} />
         <Route path="competitions/new" element={<CreateCompetition />} />
         <Route path="competitions/:id" element={<EditCompetition />} />
+        <Route path="announcements" element={<AdminAnnouncements />} />
         <Route path="students" element={<AdminStudents />} />
         <Route path="students/:studentId" element={<StudentDetails />} />
         <Route path="chat" element={<AdminChat />} />
