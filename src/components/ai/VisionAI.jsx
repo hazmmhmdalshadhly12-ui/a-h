@@ -1,24 +1,15 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import AIButton from './AIButton.jsx';
 import ChatWindow from './ChatWindow.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { sendChatMessage } from '../../services/aiService.js';
 
-/** ودجت الشات العائم — ظاهر في كل الصفحات */
+/** ودجت الشات العائم — ظاهر في كل الصفحات (يفتح يدوياً فقط) */
 export default function VisionAI() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const { profile } = useAuth();
-  const openedOnce = useRef(false);
-
-  // فتح رسالة ترحيب أول مرة بيحصل فيها تسجيل دخول
-  useEffect(() => {
-    if (profile && !openedOnce.current) {
-      openedOnce.current = true;
-      setOpen(true);
-    }
-  }, [profile]);
 
   const send = useCallback(
     async (text) => {
