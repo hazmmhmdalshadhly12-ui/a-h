@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
 import { PARENT_NAV } from '../../config/navigation.js';
-import VisionLogo from '../vision/VisionLogo.jsx';
-import SidebarNav from './SidebarNav.jsx';
-import Icon from '../ui/Icon.jsx';
-import Button from '../ui/Button.jsx';
+import VisionLogo from '../../components/vision/VisionLogo.jsx';
+import SidebarNav from '../../components/layout/SidebarNav.jsx';
+import Icon from '../../components/ui/Icon.jsx';
+import Button from '../../components/ui/Button.jsx';
 import { cn } from '../../lib/utils.js';
 
 export default function ParentSidebar({ open, onClose }) {
