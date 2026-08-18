@@ -9,11 +9,30 @@ export async function fetchMaterials(grade) {
   return q;
 }
 
-/** رابط تحميل الملف من السلة */
-export function materialUrl(filePath) {
+/** رابط تحميل الملف من السلة (بينزّل مباشرة بدل فتح نافذة العرض) */
+export function materialUrl(filePath, downloadName) {
   if (!filePath) return '';
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(filePath);
-  return data?.publicUrl || '';
+  const base = data?.publicUrl || '';
+  if (!base) return '';
+  const name = downloadName || filePath.split('/').pop() || 'file';
+  return `${base}?download=${encodeURIComponent(name)}`;
+}
+
+/** تحميل الملف كملف مباشرة في نفس الصفحة — من غير فتح صفحة تانية (بيبعد عن حظر المتصفح للروابط الخارجية) */
+export async function downloadMaterial(item) {
+  if (!item?.file_path) return { data: null, error: { message: 'بيانات ناقصة' } };
+  const { data: blob, error } = await supabase.storage.from(BUCKET).download(item.file_path);
+  if (error) return { data: null, error };
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = item.file_name || 'ملف';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return { data: true, error: null };
 }
 
 /** رفع ملف جديد مع بياناته */

@@ -19,7 +19,8 @@ import {
   deleteCourseComment,
   uploadCourseFile,
   addCourseFile,
-  deleteCourseFile
+  deleteCourseFile,
+  courseFileDownloadUrl
 } from '../../services/courseService.js';
 import { createBooking } from '../../services/bookingService.js';
 import { useToast } from '../../components/ui/Toast.jsx';
@@ -406,7 +407,7 @@ export default function CourseDetails() {
                             </p>
                           </div>
                           <div className="flex shrink-0 items-center gap-1.5">
-                            <a href={f.file_url} target="_blank" rel="noreferrer" download>
+                            <a href={courseFileDownloadUrl(f)} target="_blank" rel="noreferrer" download>
                               <Button size="sm" variant="secondary">
                                 <Icon name="download" className="h-3.5 w-3.5" /> تحميل
                               </Button>

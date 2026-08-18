@@ -56,7 +56,7 @@ export default function Materials() {
                 {item.description && <p className="mt-1 text-sm text-muted">{item.description}</p>}
                 <p className="mt-2 text-xs text-muted/70">{formatDate(item.created_at)}</p>
               </div>
-              <a href={materialUrl(item.file_path)} target="_blank" rel="noreferrer">
+              <a href={materialUrl(item.file_path, item.file_name)} target="_blank" rel="noreferrer">
                 <Button size="sm" className="w-full">
                   <Icon name="download" className="h-4 w-4" />
                   تحميل / فتح الملف

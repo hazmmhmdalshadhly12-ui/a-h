@@ -137,3 +137,34 @@ export async function uploadCourseFile(file, { courseId, studentId }) {
   const { data: urlData } = supabase.storage.from(FILES_BUCKET).getPublicUrl(path);
   return { data: { fileUrl: urlData?.publicUrl, fileType, fileName: safeName }, error: null };
 }
+
+/** رابط تحميل مباشر لملف كورس — بينزّل بدل فتح نافذة عرض PDF */
+export function courseFileDownloadUrl(file) {
+  if (!file?.file_url) return '';
+  const base = file.file_url;
+  // لو مش رابط سلة Supabase → ارجعه زي ما هو
+  if (!base.includes('/storage/v1/object/public/')) return base;
+  const name = file.title || base.split('/').pop() || 'file';
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}download=${encodeURIComponent(name)}`;
+}
+
+/** تحميل ملف كورس كملف مباشرة في نفس الصفحة — من غير فتح صفحة تانية */
+export async function downloadCourseFile(file) {
+  if (!file?.file_url) return { data: null, error: { message: 'بيانات ناقصة' } };
+  const marker = '/object/public/course-files/';
+  const idx = file.file_url.indexOf(marker);
+  const path = idx >= 0 ? file.file_url.slice(idx + marker.length) : null;
+  if (!path) return { data: null, error: { message: 'مسار الملف غير صحيح' } };
+  const { data: blob, error } = await supabase.storage.from(FILES_BUCKET).download(path);
+  if (error) return { data: null, error };
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = file.title || 'ملف';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return { data: true, error: null };
+}

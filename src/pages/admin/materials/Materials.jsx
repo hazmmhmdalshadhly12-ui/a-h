@@ -150,7 +150,7 @@ export default function Materials() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <a href={materialUrl(item.file_path)} target="_blank" rel="noreferrer">
+                  <a href={materialUrl(item.file_path, item.file_name)} target="_blank" rel="noreferrer">
                     <Button variant="outline" size="sm">
                       <Icon name="download" className="h-4 w-4" />
                       فتح
