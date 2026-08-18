@@ -19,9 +19,6 @@ export function materialUrl(filePath) {
 /** رفع ملف جديد مع بياناته */
 export async function uploadMaterial({ title, description, grade, file }) {
   if (!title?.trim() || !grade || !file) return { data: null, error: { message: 'اكتب العنوان واختار الصف والملف' } };
-  const { data: session } = await supabase.auth.getSession();
-  const uid = session?.user?.id;
-  if (!uid) return { data: null, error: { message: 'غير مسجل دخولك — سجّل الدخول وجرب تاني' } };
 
   const ext = (file.name.split('.').pop() || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const safeExt = ext ? `.${ext}` : '';
@@ -38,8 +35,7 @@ export async function uploadMaterial({ title, description, grade, file }) {
       grade,
       file_name: file.name,
       file_path: up.data.path,
-      file_size: file.size,
-      created_by: uid
+      file_size: file.size
     })
     .select()
     .single();

@@ -12,12 +12,9 @@ export async function fetchAnnouncements() {
 
 export async function createAnnouncement({ title, body, isPinned }) {
   if (!title?.trim()) return { data: null, error: { message: 'اكتب عنوان الإعلان' } };
-  const { data: session } = await supabase.auth.getSession();
-  const createdBy = session?.user?.id;
-  if (!createdBy) return { data: null, error: { message: 'غير مسجل دخولك — سجّل الدخول وجرب تاني' } };
   return supabase
     .from('announcements')
-    .insert({ title: title.trim(), body: body?.trim() || null, is_pinned: Boolean(isPinned), created_by: createdBy })
+    .insert({ title: title.trim(), body: body?.trim() || null, is_pinned: Boolean(isPinned) })
     .select()
     .single();
 }
