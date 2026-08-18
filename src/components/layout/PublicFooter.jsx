@@ -81,6 +81,19 @@ export default function PublicFooter() {
           <p className="text-xs text-muted">{SITE.footerNote}</p>
           <p className="font-mono text-xs text-muted">© {new Date().getFullYear()} Vision Academy</p>
         </div>
+
+        <div className="flex flex-col items-center justify-center gap-1.5 pt-4 text-center">
+          <p className="text-xs text-muted">المطور حازم</p>
+          <a
+            href="https://wa.me/01208839442"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-muted transition hover:text-stream"
+          >
+            <Icon name="whatsapp" className="h-3.5 w-3.5" />
+            <span dir="ltr">01208839442</span> واتساب
+          </a>
+        </div>
       </div>
     </footer>
   );
