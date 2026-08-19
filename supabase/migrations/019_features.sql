@@ -101,51 +101,56 @@ begin
     raise exception 'يجب تسجيل الدخول';
   end if;
 
-  v_grade := coalesce(nullif(p_grade, ''), (select grade from public.profiles where id = auth.uid()));
+  v_grade := coalesce(nullif(p_grade, ''), (select pr.grade from public.profiles pr where pr.id = auth.uid()));
   if v_grade is null then
     raise exception 'حدد الصف';
   end if;
 
   return query
-    with totals as (
+    with exam_pts as (
+      select sub.student_id,
+             sum(coalesce(sub.score, 0)) as pts,
+             count(*) as cnt
+      from public.exam_submissions sub
+      where sub.grade_released
+      group by sub.student_id
+    ),
+    hw_pts as (
+      select hs.student_id,
+             sum(coalesce(hs.auto_score, 0)) as pts,
+             count(*) as cnt
+      from public.homework_submissions hs
+      join public.homeworks hw on hw.id = hs.homework_id
+      join public.courses crs on crs.id = hw.course_id
+      where crs.grade = v_grade
+      group by hs.student_id
+    ),
+    totals as (
       select
-        p.id as student_id,
-        p.full_name,
-        p.grade,
-        coalesce((
-          select sum(coalesce(s.score, 0))
-          from public.exam_submissions s
-          where s.student_id = p.id and s.grade_released
-        ), 0) as exam_points,
-        coalesce((
-          select sum(coalesce(hs.auto_score, 0))
-          from public.homework_submissions hs
-          join public.homeworks h on h.id = hs.homework_id
-          join public.courses c on c.id = h.course_id
-          where hs.student_id = p.id and c.grade = p.grade
-        ), 0) as homework_points,
-        (select count(*) from public.exam_submissions s
-         where s.student_id = p.id and s.grade_released) as exams_done,
-        (select count(*) from public.homework_submissions hs
-         join public.homeworks h on h.id = hs.homework_id
-         join public.courses c on c.id = h.course_id
-         where hs.student_id = p.id and c.grade = p.grade) as homeworks_done
-      from public.profiles p
-      where p.role = 'student' and p.grade = v_grade
+        pr.id as student_id,
+        pr.full_name as full_name,
+        pr.grade as grade,
+        coalesce(ep.pts, 0) + coalesce(hw.pts, 0) as total_points,
+        coalesce(ep.cnt, 0) as exams_done,
+        coalesce(hw.cnt, 0) as homeworks_done
+      from public.profiles pr
+      left join exam_pts ep on ep.student_id = pr.id
+      left join hw_pts hw on hw.student_id = pr.id
+      where pr.role = 'student' and pr.grade = v_grade
     )
     select
-      t.student_id,
-      t.full_name,
-      t.grade,
-      (t.exam_points + t.homework_points) as total_points,
-      t.exams_done,
-      t.homeworks_done,
+      tl.student_id,
+      tl.full_name,
+      tl.grade,
+      tl.total_points,
+      tl.exams_done,
+      tl.homeworks_done,
       row_number() over (
-        order by (t.exam_points + t.homework_points) desc, t.exams_done desc, t.homeworks_done desc
+        order by tl.total_points desc, tl.exams_done desc, tl.homeworks_done desc
       )::bigint as student_rank
-    from totals t
-    where (t.exam_points + t.homework_points) > 0
-    order by total_points desc, exams_done desc
+    from totals tl
+    where tl.total_points > 0
+    order by tl.total_points desc, tl.exams_done desc
     limit 20;
 end;
 $$;

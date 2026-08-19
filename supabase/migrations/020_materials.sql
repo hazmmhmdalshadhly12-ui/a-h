@@ -43,6 +43,24 @@ create policy "materials: admin write"
   on public.materials for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
 
+-- ضمانة: لو مفيش كاتب مبعوت، خد من المستخدم المسجل (التوكن)
+create or replace function public.materials_set_author()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.created_by is null then
+    new.created_by := auth.uid();
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists materials_set_author on public.materials;
+create trigger materials_set_author
+  before insert on public.materials
+  for each row execute procedure public.materials_set_author();
+
 -- 3) سياسات رفع/حذف الملفات في السلة (للأدمن فقط)
 drop policy if exists "materials: admin upload" on storage.objects;
 create policy "materials: admin upload"
