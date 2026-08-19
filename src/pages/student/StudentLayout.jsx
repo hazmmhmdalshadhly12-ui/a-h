@@ -7,19 +7,14 @@ import VisionAI from '../../components/ai/VisionAI.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { Navigate } from 'react-router-dom';
 import { canAccessStudent } from '../../utils/permissions.js';
+import { StudentPrefsProvider, useStudentPrefs } from '../../context/StudentPrefsContext.jsx';
 
-export default function StudentLayout() {
-  const { profile, loading } = useAuth();
+function StudentLayoutInner() {
+  const { accent } = useStudentPrefs();
   const [open, setOpen] = useState(false);
 
-  if (loading) return null;
-
-  if (!profile || !canAccessStudent(profile)) {
-    return <Navigate to="/login" replace />;
-  }
-
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen" data-accent={accent}>
       <StudentSidebar open={open} onClose={() => setOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
         <MobileNav onMenuClick={() => setOpen(true)} title="بوابة الطالب" />
@@ -30,5 +25,21 @@ export default function StudentLayout() {
       </div>
       <VisionAI />
     </div>
+  );
+}
+
+export default function StudentLayout() {
+  const { profile, loading } = useAuth();
+
+  if (loading) return null;
+
+  if (!profile || !canAccessStudent(profile)) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return (
+    <StudentPrefsProvider studentId={profile.id}>
+      <StudentLayoutInner />
+    </StudentPrefsProvider>
   );
 }
