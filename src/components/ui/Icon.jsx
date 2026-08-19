@@ -41,6 +41,7 @@ const PATHS = {
   info: <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zm0-10v4m0-8h.01" />,
   external: <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" />,
   download: <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />,
+  code: <path d="m8 9-3 3 3 3M16 9l3 3-3 3m-3-9-2 12" />,
   pin: <path d="M9 4h6l-1 7 3 3v2H7v-2l3-3-1-7zM12 16v5" />
 };
 

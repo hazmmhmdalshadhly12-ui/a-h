@@ -25,6 +25,7 @@ import CompetitionDetails from '../pages/student/CompetitionDetails.jsx';
 import Notifications from '../pages/student/Notifications.jsx';
 import Leaderboard from '../pages/student/Leaderboard.jsx';
 import StudentMaterials from '../pages/student/Materials.jsx';
+import CodePlayground from '../pages/student/CodePlayground.jsx';
 import Profile from '../pages/student/Profile.jsx';
 import StudentChat from '../pages/student/Chat.jsx';
 
@@ -50,6 +51,7 @@ import CreateCompetition from '../pages/admin/competitions/CreateCompetition.jsx
 import EditCompetition from '../pages/admin/competitions/EditCompetition.jsx';
 import AdminAnnouncements from '../pages/admin/announcements/Announcements.jsx';
 import AdminMaterials from '../pages/admin/materials/Materials.jsx';
+import CodeChallenges from '../pages/admin/code/CodeChallenges.jsx';
 import AdminStudents from '../pages/admin/students/Students.jsx';
 import StudentDetails from '../pages/admin/students/StudentDetails.jsx';
 import ContactLinks from '../pages/admin/contacts/ContactLinks.jsx';
@@ -93,6 +95,7 @@ export default function AppRoutes() {
         <Route path="competitions/:id" element={<CompetitionDetails />} />
         <Route path="leaderboard" element={<Leaderboard />} />
         <Route path="materials" element={<StudentMaterials />} />
+        <Route path="code" element={<CodePlayground />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="chat" element={<StudentChat />} />
         <Route path="profile" element={<Profile />} />
@@ -134,6 +137,7 @@ export default function AppRoutes() {
         <Route path="courses/:courseId/manage" element={<CourseManager />} />
         <Route path="sections" element={<AdminSections />} />
         <Route path="materials" element={<AdminMaterials />} />
+        <Route path="code-challenges" element={<CodeChallenges />} />
         <Route path="bookings" element={<AdminBookings />} />
         <Route path="competitions" element={<AdminCompetitions />} />
         <Route path="competitions/new" element={<CreateCompetition />} />
