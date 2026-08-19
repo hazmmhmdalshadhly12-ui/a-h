@@ -2,6 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   لون الهوية (signal) — متغيرات CSS عشان الطالب يغيّر لون لوحته
+   إعدادات data-accent على جذر بوابة الطالب بتغيّر اللون لكل شاشة
+   ============================================================ */
+:root {
+  --c-signal-rgb: 245 183 65; /* كهرماني — الهوية الأصلية */
+  --c-signal-light-rgb: 255 210 122;
+  --c-signal-dark-rgb: 217 146 37;
+}
+
+[data-accent='violet'] {
+  --c-signal-rgb: 167 139 250;
+  --c-signal-light-rgb: 196 181 253;
+  --c-signal-dark-rgb: 139 92 246;
+}
+
+[data-accent='emerald'] {
+  --c-signal-rgb: 52 211 153;
+  --c-signal-light-rgb: 110 231 183;
+  --c-signal-dark-rgb: 16 185 129;
+}
+
+[data-accent='sky'] {
+  --c-signal-rgb: 56 189 248;
+  --c-signal-light-rgb: 125 211 252;
+  --c-signal-dark-rgb: 14 165 233;
+}
+
+[data-accent='rose'] {
+  --c-signal-rgb: 251 113 133;
+  --c-signal-light-rgb: 253 164 175;
+  --c-signal-dark-rgb: 225 29 72;
+}
+
+[data-accent='teal'] {
+  --c-signal-rgb: 94 234 212;
+  --c-signal-light-rgb: 150 244 234;
+  --c-signal-dark-rgb: 45 212 191;
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;
@@ -41,7 +81,7 @@
 
   .text-gradient {
     @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(120deg, #f5b741, #5eead4);
+    background-image: linear-gradient(120deg, rgb(var(--c-signal-rgb) / 1), #5eead4);
   }
 
   .bg-grid {

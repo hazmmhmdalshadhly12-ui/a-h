@@ -21,7 +21,7 @@ export default function SidebarNav({ items, onNavigate }) {
                     cn(
                       'focus-ring flex items-center gap-3 rounded-lens px-3 py-2.5 text-sm font-medium transition',
                       isActive
-                        ? 'bg-signal/15 text-signal shadow-[inset_2px_0_0_0_#F5B741]'
+                        ? 'bg-signal/15 text-signal shadow-[inset_2px_0_0_0_rgb(var(--c-signal-rgb))]'
                         : 'text-muted hover:bg-ink-700/50 hover:text-paper'
                     )
                   }
