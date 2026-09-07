@@ -57,6 +57,17 @@ export default function Courses() {
       render: (c) => (c.video_url ? <Badge color="success">موجود</Badge> : <Badge color="warning">بدون</Badge>)
     },
     {
+      key: 'sections',
+      label: 'أقسام/دروس',
+      render: (c) => (
+        <Link to={`/admin/courses/${c.id}/sections`}>
+          <Button size="sm" variant="secondary">
+            <Icon name="layers" className="h-3.5 w-3.5" /> أقسام
+          </Button>
+        </Link>
+      )
+    },
+    {
       key: 'actions',
       label: 'إجراءات',
       render: (c) => (
