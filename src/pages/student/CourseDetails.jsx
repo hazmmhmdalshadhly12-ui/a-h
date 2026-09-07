@@ -10,18 +10,8 @@ import Input from '../../components/ui/Input.jsx';
 import Textarea from '../../components/ui/Textarea.jsx';
 import Skeleton from '../../components/ui/Skeleton.jsx';
 import SubscriptionGate from '../../components/academy/SubscriptionGate.jsx';
-import {
-  fetchCourseLessons,
-  fetchCourseHomeworks,
-  fetchCourseFiles,
-  fetchCourseComments,
-  addCourseComment,
-  deleteCourseComment,
-  uploadCourseFile,
-  addCourseFile,
-  deleteCourseFile,
-  courseFileDownloadUrl
-} from '../../services/courseService.js';
+import { supabase } from '../../lib/supabaseClient.js';
+import { fetchCourseHomeworks, fetchCourseFiles, fetchCourseComments, addCourseComment, deleteCourseComment, uploadCourseFile, addCourseFile, deleteCourseFile, courseFileDownloadUrl, fetchCourseSectionsWithLessons } from '../../services/courseService.js';
 import { createBooking } from '../../services/bookingService.js';
 import { useToast } from '../../components/ui/Toast.jsx';
 import { GRADE_SHORT } from '../../config/site.js';
@@ -45,7 +35,8 @@ export default function CourseDetails() {
   const { course, loading } = useCourse(courseId, profile?.grade);
   const toast = useToast();
 
-  const [lessons, setLessons] = useState([]);
+  // بيانات الكورس الجديدة: أقسام + دروس
+  const [sections, setSections] = useState([]);
   const [homeworks, setHomeworks] = useState([]);
   const [files, setFiles] = useState([]);
   const [comments, setComments] = useState([]);
@@ -71,20 +62,31 @@ export default function CourseDetails() {
     if (!courseId) return;
     setExtraLoading(true);
     Promise.all([
-      fetchCourseLessons(courseId),
+      fetchCourseSectionsWithLessons(courseId),
       fetchCourseHomeworks(courseId),
       fetchCourseFiles(courseId),
       fetchCourseComments(courseId)
     ])
-      .then(([l, h, f, c]) => {
-        const lessonList = Array.isArray(l.data) ? l.data : [];
+      .then(([s, h, f, c]) => {
+        const sectionList = Array.isArray(s.data) ? s.data : [];
         const hwList = Array.isArray(h.data) ? h.data : [];
-        setLessons(lessonList);
+        setSections(sectionList);
         setHomeworks(hwList);
         setFiles(Array.isArray(f.data) ? f.data : []);
         setComments(Array.isArray(c.data) ? c.data : []);
-        setActiveLessonId(lessonList[0]?.lesson_id || null);
-        const contentBased = lessonList.length > 0 || hwList.length > 0 || (f.data && f.data.length > 0);
+
+        // أول درس مفتوح تلقائياً
+        let firstAccessible = null;
+        for (const sec of sectionList) {
+          const found = sec.lesson_id && sec.lesson_accessible && sec.lesson_id;
+          if (found) {
+            firstAccessible = sec.lesson_id;
+            break;
+          }
+        }
+        setActiveLessonId(firstAccessible);
+
+        const contentBased = sectionList.length > 0 || hwList.length > 0 || (f.data && f.data.length > 0);
         setCanAccess(contentBased || (course?.accessible ?? false));
         setExtraLoading(false);
       })
@@ -113,12 +115,19 @@ export default function CourseDetails() {
 
   const isProfessional = course.grade === 'professional';
   const isMyGrade = profile?.grade === course.grade;
-  // الاحترافي: الوصول الرسمي من get_student_courses (accessible) — للمشترك من غير محتوى لسه
   const effectiveAccess = canAccess || Boolean(course?.accessible);
-  // الكورس الاحترافي متاح للمشترك فيه من أي صف (أولى/تانية يقدر يشترك ويشاهد)
   const canWatch = Boolean(profile) && effectiveAccess && (isProfessional || isMyGrade);
-  const activeLesson = lessons.find((l) => l.lesson_id === activeLessonId);
-  const videoUrl = toEmbedUrl(activeLesson?.video_url || course.video_url);
+
+  // الدرس النشط
+  let activeLesson = null;
+  for (const sec of sections) {
+    if (sec.lesson_id === activeLessonId) {
+      activeLesson = sec;
+      break;
+    }
+  }
+  const isLessonAccessible = activeLesson?.lesson_accessible === true || activeLesson?.lesson_is_free === true;
+  const videoUrl = toEmbedUrl(activeLesson?.lesson_video_url || course.video_url);
   const instagram = PAYMENT_INFO.instagramNumber;
 
   // ===== التعليقات =====
@@ -126,7 +135,7 @@ export default function CourseDetails() {
     e.preventDefault();
     if (!commentBody.trim()) return toast.error('اكتب تعليقك الأول');
     setCommentSubmitting(true);
-    const { error } = await addCourseComment(courseId, commentBody);
+    const { error } = await supabase.rpc('add_course_comment', { p_course_id: courseId, p_body: commentBody });
     setCommentSubmitting(false);
     if (error) return toast.error(getFriendlyError(error, 'فشل إضافة التعليق'));
     setCommentBody('');
@@ -217,7 +226,7 @@ export default function CourseDetails() {
           </Link>
         </div>
 
-        {/* ===== الكورس الاحترافي غير المشترك: عرض السعر + الاشتراك ===== */}
+        {/* ===== الكورس الاحترافي غير مشترك: عرض السعر + الاشتراك ===== */}
         {isProfessional && !canWatch && !effectiveAccess ? (
           <Card className="space-y-4 p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -275,59 +284,85 @@ export default function CourseDetails() {
           </Card>
         ) : (
           <>
-            {/* ===== المحاضرات + الفيديو ===== */}
+            {/* ===== الأقسام + الدروس + الفيديو ===== */}
             <div className="grid gap-6 lg:grid-cols-3">
+              {/* الشريط الجانبي: الأقسام والدروس */}
               <Card className="overflow-hidden lg:col-span-1">
                 <div className="flex items-center gap-2 border-b border-ink-600 px-4 py-3">
-                  <Icon name="play" className="h-4 w-4 text-signal" />
-                  <p className="font-display text-sm font-bold text-paper">المحاضرات ({lessons.length})</p>
+                  <Icon name="layers" className="h-4 w-4 text-signal" />
+                  <p className="font-display text-sm font-bold text-paper">الأقسام والدروس ({sections.length})</p>
                 </div>
-                <div className="max-h-[50vh] overflow-y-auto">
+                <div className="max-h-[70vh] overflow-y-auto">
                   {extraLoading ? (
                     <div className="space-y-2 p-4">
                       <Skeleton className="h-12" />
                       <Skeleton className="h-12" />
                     </div>
-                  ) : lessons.length === 0 ? (
-                    <p className="p-4 text-center text-sm text-muted">لا توجد محاضرات بعد — تابعنا.</p>
+                  ) : sections.length === 0 ? (
+                    <p className="p-4 text-center text-sm text-muted">لا توجد أقسام بعد — تابعنا.</p>
                   ) : (
                     <ul>
-                      {lessons.map((l, i) => (
-                        <li key={l.lesson_id}>
-                          <button
-                            type="button"
-                            onClick={() => setActiveLessonId(l.lesson_id)}
-                            className={cn(
-                              'focus-ring flex w-full items-start gap-3 border-b border-ink-700/50 px-4 py-3 text-right transition hover:bg-ink-800/60',
-                              activeLessonId === l.lesson_id && 'bg-signal/10'
-                            )}
-                          >
-                            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink-800 font-mono text-xs text-muted">
-                              {String(i + 1).padStart(2, '0')}
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block text-sm font-semibold text-paper">{l.title}</span>
-                              <span className="block text-xs text-muted">
-                                {l.video_url ? 'فيديو ✓' : ''}
-                                {l.content ? (l.video_url ? ' • نص ✓' : 'نص ✓') : ''}
+                      {sections.map((sec) => {
+                        const isSectionHeader = !sec.lesson_id;
+                        const isLesson = sec.lesson_id && sec.lesson_id !== null;
+
+                        if (isSectionHeader) {
+                          return (
+                            <li key={sec.section_id}>
+                              <div className="border-b border-ink-700/60 px-4 py-3">
+                                <p className="flex items-center gap-2">
+                                  <Icon name="folder" className="h-4 w-4 text-stream" />
+                                  <span className="font-semibold text-paper">{sec.section_title}</span>
+                                  <Badge color="muted" className="ml-auto">{sec.section_order}</Badge>
+                                </p>
+                                {sec.section_description && <p className="mt-1 text-xs text-muted">{sec.section_description}</p>}
+                              </div>
+                            </li>
+                          );
+                        }
+
+                        const accessible = sec.lesson_accessible === true || sec.lesson_is_free === true;
+                        return (
+                          <li key={sec.lesson_id}>
+                            <button
+                              type="button"
+                              onClick={() => setActiveLessonId(sec.lesson_id)}
+                              className={cn(
+                                'focus-ring flex w-full items-start gap-3 border-b border-ink-700/50 px-4 py-3 text-right transition hover:bg-ink-800/60',
+                                activeLessonId === sec.lesson_id && 'bg-signal/10',
+                                !accessible && 'opacity-70'
+                              )}
+                            >
+                              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink-800 font-mono text-xs text-muted">
+                                {String(sec.lesson_order).padStart(2, '0')}
                               </span>
-                            </span>
-                            {activeLessonId === l.lesson_id && <Icon name="check" className="mt-1 h-4 w-4 shrink-0 text-signal" />}
-                          </button>
-                        </li>
-                      ))}
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-semibold text-paper">{sec.lesson_title}</span>
+                                <span className="block text-xs text-muted">
+                                  {!accessible && <span className="text-warning">🔒 مقفول</span>}
+                                  {sec.lesson_video_url ? (accessible ? 'فيديو ✓' : 'فيديو 🔒') : ''}
+                                  {sec.lesson_is_free && <span className="text-success ml-2">🆓 مجاني</span>}
+                                </span>
+                              </span>
+                              {!accessible && <Icon name="lock" className="mt-1 h-4 w-4 shrink-0 text-warning/60" />}
+                              {activeLessonId === sec.lesson_id && accessible && <Icon name="check" className="mt-1 h-4 w-4 shrink-0 text-signal" />}
+                            </button>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
               </Card>
 
+              {/* منطقة الفيديو + المحتوى */}
               <div className="space-y-6 lg:col-span-2">
                 <div className="card-panel overflow-hidden rounded-lens">
-                  {canWatch && videoUrl ? (
+                  {isLessonAccessible && videoUrl ? (
                     <div className="aspect-video w-full">
                       <iframe
                         src={videoUrl}
-                        title={activeLesson?.title || course.title}
+                        title={activeLesson?.lesson_title || course.title}
                         className="h-full w-full"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                         allowFullScreen
@@ -335,24 +370,34 @@ export default function CourseDetails() {
                     </div>
                   ) : (
                     <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-ink-900/60">
-                      <Icon name="eye" className="h-12 w-12 text-signal/60" />
+                      <Icon name="lock" className="h-12 w-12 text-warning/60" />
                       <p className="font-display text-lg font-bold text-paper">
-                        {canWatch ? 'لا يوجد فيديو لهذا الدرس بعد' : 'الفيديو متاح لطلاب هذا الصف فقط'}
+                        {activeLesson?.lesson_video_url ? 'هذا الدرس مقفول' : 'لا يوجد فيديو لهذا الدرس بعد'}
                       </p>
-                      {!canWatch && (
-                        <p className="max-w-md text-center text-sm text-muted">
-                          الكورسات الكاملة متاحة للطلاب المسجلين في الصف المطابق. سجّل حسابك أو تواصل مع المستر لو محتاج وصول.
-                        </p>
+                      {activeLesson?.lesson_video_url && !isLessonAccessible && (
+                        <div className="max-w-md text-center space-y-3">
+                          <p className="text-sm text-muted">
+                            هذا الدرس متاح للطلاب المشتركين فقط. اشترك في الكورس علشان تشوف الفيديو.
+                          </p>
+                          {!effectiveAccess && !isProfessional && (
+                            <Button variant="secondary" onClick={() => setShowSubscribe(true)}>
+                              <Icon name="lock" className="h-4 w-4" /> اشترك في الكورس
+                            </Button>
+                          )}
+                          {effectiveAccess && !activeLesson?.lesson_accessible && activeLesson?.lesson_is_free === false && (
+                            <p className="text-xs text-muted">الدرس ده مش مجاني — تواصل مع المستر لو محتاج تشوفه.</p>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
                 </div>
 
-                {/* نص المحاضرة */}
-                {canWatch && activeLesson?.content && (
+                {/* نص الدرس */}
+                {isLessonAccessible && activeLesson?.lesson_description && (
                   <Card>
-                    <h2 className="mb-2 font-display text-lg font-bold">شرح المحاضرة</h2>
-                    <div className="whitespace-pre-wrap leading-relaxed text-muted">{activeLesson.content}</div>
+                    <h2 className="mb-2 font-display text-lg font-bold">شرح الدرس</h2>
+                    <div className="whitespace-pre-wrap leading-relaxed text-muted">{activeLesson.lesson_description}</div>
                   </Card>
                 )}
               </div>

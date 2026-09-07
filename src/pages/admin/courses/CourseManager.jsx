@@ -10,11 +10,14 @@ import Textarea from '../../../components/ui/Textarea.jsx';
 import Select from '../../../components/ui/Select.jsx';
 import { useToast } from '../../../components/ui/Toast.jsx';
 import {
-  fetchLessons,
-  createLesson,
-  updateLesson,
-  deleteLesson
-} from '../../../services/lessonService.js';
+  fetchCourseSectionsAdmin,
+  addCourseSection,
+  updateCourseSection,
+  deleteCourseSection,
+  addCourseLesson,
+  updateCourseLesson,
+  deleteCourseLesson
+} from '../../../services/courseService.js';
 import {
   fetchHomeworks,
   createHomework,
@@ -44,21 +47,28 @@ import { getFriendlyError } from '../../../utils/errors.js';
 import { cn } from '../../../lib/utils.js';
 import { formatDateTime } from '../../../utils/formatDate.js';
 
-/** إدارة محتويات الكورس: المحاضرات + الواجبات + الملفات + التعليقات */
+/** إدارة محتويات الكورس: الأقسام + الدروس + الواجبات + الملفات + التعليقات */
 export default function CourseManager() {
   const { courseId } = useParams();
   const { profile } = useAuth();
   const toast = useToast();
 
-  const [lessons, setLessons] = useState([]);
+  const [sections, setSections] = useState([]);
   const [homeworks, setHomeworks] = useState([]);
   const [files, setFiles] = useState([]);
   const [comments, setComments] = useState([]);
-  const [tab, setTab] = useState('lessons');
+  const [tab, setTab] = useState('sections');
   const [loading, setLoading] = useState(true);
 
-  // فورم محاضرة
-  const [lessonForm, setLessonForm] = useState({ title: '', video_url: '', content: '', order_index: 1 });
+  // فورم قسم
+  const [sectionForm, setSectionForm] = useState({ title: '', order_index: 1 });
+  const [editingSection, setEditingSection] = useState(null);
+  const [sectionSubmitting, setSectionSubmitting] = useState(false);
+
+  // فورم درس
+  const [lessonForm, setLessonForm] = useState({ 
+    section_id: '', title: '', description: '', video_url: '', video_duration: '', order_index: 1, is_free: false 
+  });
   const [editingLesson, setEditingLesson] = useState(null);
   const [lessonSubmitting, setLessonSubmitting] = useState(false);
 
@@ -81,13 +91,13 @@ export default function CourseManager() {
   const [fileSubmitting, setFileSubmitting] = useState(false);
 
   const load = async () => {
-    const [l, h, f, c] = await Promise.all([
-      fetchLessons(courseId),
+    const [s, h, f, c] = await Promise.all([
+      fetchCourseSectionsAdmin(courseId),
       fetchHomeworks(courseId),
       fetchCourseFiles(courseId),
       fetchCourseComments(courseId)
     ]);
-    setLessons(l.data || []);
+    setSections(s.data || []);
     setHomeworks(h.data || []);
     setFiles(f.data || []);
     setComments(c.data || []);
@@ -291,7 +301,7 @@ export default function CourseManager() {
   };
 
   const tabs = [
-    { key: 'lessons', label: `المحاضرات (${lessons.length})` },
+    { key: 'sections', label: `الأقسام والدروس` },
     { key: 'homeworks', label: `الواجبات (${homeworks.length})` },
     { key: 'files', label: `الملفات (${files.length})` },
     { key: 'comments', label: `التعليقات (${comments.length})` }
@@ -327,89 +337,99 @@ export default function CourseManager() {
         ))}
       </div>
 
-      {loading ? (
-        <Card className="text-center text-muted">جارٍ التحميل...</Card>
-      ) : tab === 'lessons' ? (
-        <div className="space-y-5">
-          <Card>
-            <h2 className="mb-4 font-display text-lg font-bold">{editingLesson ? 'تعديل محاضرة' : 'إضافة محاضرة'}</h2>
-            <form onSubmit={submitLesson} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Input
-                  name="title"
-                  label="عنوان المحاضرة *"
-                  value={lessonForm.title}
-                  onChange={(e) => setLessonForm({ ...lessonForm, title: e.target.value })}
-                  required
-                />
-                <Input
-                  name="order_index"
-                  label="الترتيب"
-                  type="number"
-                  min="1"
-                  value={lessonForm.order_index}
-                  onChange={(e) => setLessonForm({ ...lessonForm, order_index: e.target.value })}
-                />
-              </div>
-              <Input
-                name="video_url"
-                label="رابط الفيديو (YouTube embed)"
-                placeholder="https://www.youtube.com/embed/..."
-                dir="ltr"
-                value={lessonForm.video_url}
-                onChange={(e) => setLessonForm({ ...lessonForm, video_url: e.target.value })}
-              />
-              <Textarea
-                name="content"
-                label="نص المحاضرة (الشرح المكتوب)"
-                rows={5}
-                placeholder="اكتب شرح المحاضرة هنا — هيتظهر للطالب تحت الفيديو."
-                value={lessonForm.content}
-                onChange={(e) => setLessonForm({ ...lessonForm, content: e.target.value })}
-              />
-              <div className="flex items-end gap-2">
-                <Button type="submit" loading={lessonSubmitting}>{editingLesson ? 'حفظ' : 'إضافة المحاضرة'}</Button>
-                {editingLesson && (
-                  <Button type="button" variant="secondary" onClick={() => { setEditingLesson(null); setLessonForm({ title: '', video_url: '', content: '', order_index: 1 }); }}>
-                    إلغاء
-                  </Button>
-                )}
-              </div>
-            </form>
-          </Card>
+      const renderOptionsHint = (q) => {
+    if (q.type === 'true_false') {
+      return <span className="text-xs text-muted">الإجابة الصحيحة: {q.correct_answer === 'true' ? 'صح ✓' : q.correct_answer === 'false' ? 'غلط ✗' : q.correct_answer || '—'}</span>;
+    }
+    const opts = Array.isArray(q.options) ? q.options : [];
+    return (
+      <span className="text-xs text-muted">
+        الاختيارات: {opts.join(' • ') || '—'} — الصحيح: {q.correct_answer || '—'}
+      </span>
+    );
+  };
 
-          {lessons.length === 0 ? (
-            <Card className="text-center text-muted">لا توجد محاضرات في هذا الدرس بعد.</Card>
-          ) : (
-            <Card>
-              <ul className="divide-y divide-ink-700/60">
-                {lessons.map((l) => (
-                  <li key={l.id} className="flex items-center justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-paper">
-                        <span className="font-mono text-muted">#{l.order_index} </span>
-                        {l.title}
-                      </p>
-                      <p className="truncate text-xs text-muted">
-                        {l.video_url ? 'فيديو ✓' : 'بدون فيديو'}
-                        {l.content ? ' • نص ✓' : ''}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <Button size="sm" variant="secondary" onClick={() => startEditLesson(l)}>
-                        <Icon name="edit" className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button size="sm" variant="danger" onClick={() => removeLesson(l.id)}>
-                        <Icon name="trash" className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-        </div>
-      ) : tab === 'files' ? (
+  // ===== الأقسام والدروس =====
+  const submitSection = async (e) => {
+    e.preventDefault();
+    if (!sectionForm.title.trim()) return toast.error('اكتب عنوان القسم');
+    setSectionSubmitting(true);
+    const { error } = editingSection
+      ? await updateCourseSection(editingSection.section_id, sectionForm.title, sectionForm.order_index)
+      : await addCourseSection(courseId, sectionForm.title, sectionForm.order_index);
+    setSectionSubmitting(false);
+    if (error) return toast.error(getFriendlyError(error, 'فشل الحفظ'));
+    toast.success(editingSection ? 'تم تحديث القسم' : 'تمت إضافة القسم');
+    setEditingSection(null);
+    setSectionForm({ title: '', order_index: 1 });
+    load();
+  };
+
+  const startEditSection = (s) => {
+    setEditingSection(s);
+    setSectionForm({ title: s.section_title || '', order_index: s.section_order || 1 });
+  };
+
+  const removeSection = async (sectionId) => {
+    if (!window.confirm('حذف هذا القسم وكل دروسه؟')) return;
+    const { error } = await deleteCourseSection(sectionId);
+    if (error) return toast.error(getFriendlyError(error, 'فشل الحذف'));
+    toast.success('تم الحذف');
+    load();
+  };
+
+  // ===== الدروس =====
+  const submitLesson = async (e) => {
+    e.preventDefault();
+    if (!lessonForm.title.trim()) return toast.error('اكتب عنوان الدرس');
+    if (!lessonForm.section_id) return toast.error('اختار القسم');
+    setLessonSubmitting(true);
+    const payload = {
+      title: lessonForm.title.trim(),
+      description: lessonForm.description || '',
+      video_url: lessonForm.video_url || '',
+      video_duration: lessonForm.video_duration || '',
+      order_index: Number(lessonForm.order_index) || 1,
+      is_free: lessonForm.is_free
+    };
+    const { error } = editingLesson
+      ? await updateCourseLesson(editingLesson.lesson_id, payload)
+      : await addCourseLesson(lessonForm.section_id, payload);
+    setLessonSubmitting(false);
+    if (error) return toast.error(getFriendlyError(error, 'فشل الحفظ'));
+    toast.success(editingLesson ? 'تم تحديث الدرس' : 'تمت إضافة الدرس');
+    setEditingLesson(null);
+    setLessonForm({ section_id: '', title: '', description: '', video_url: '', video_duration: '', order_index: 1, is_free: false });
+    load();
+  };
+
+  const startEditLesson = (l) => {
+    setEditingLesson(l);
+    setLessonForm({
+      section_id: l.section_id,
+      title: l.lesson_title || '',
+      description: l.lesson_description || '',
+      video_url: l.lesson_video_url || '',
+      video_duration: l.lesson_video_duration || '',
+      order_index: l.lesson_order || 1,
+      is_free: l.lesson_is_free || false
+    });
+  };
+
+  const removeLesson = async (lessonId) => {
+    if (!window.confirm('حذف هذا الدرس؟')) return;
+    const { error } = await deleteCourseLesson(lessonId);
+    if (error) return toast.error(getFriendlyError(error, 'فشل الحذف'));
+    toast.success('تم الحذف');
+    load();
+  };
+
+  const tabs = [
+    { key: 'sections', label: `الأقسام والدروس` },
+    { key: 'homeworks', label: `الواجبات (${homeworks.length})` },
+    { key: 'files', label: `الملفات (${files.length})` },
+    { key: 'comments', label: `التعليقات (${comments.length})` }
+  ];
         <div className="space-y-5">
           <Card>
             <h2 className="mb-4 font-display text-lg font-bold">رفع ملف (PDF أو ZIP)</h2>
