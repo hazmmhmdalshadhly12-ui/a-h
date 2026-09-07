@@ -75,7 +75,8 @@ export default function Register() {
     const errs = {};
     errs.fullName = validateName(form.fullName);
     errs.phone = validatePhone(form.phone, { required: true });
-    errs.parentPhone = isParent ? null : validatePhone(form.parentPhone, { label: 'رقم ولي الأمر' });
+    // رقم ولي الأمر إجباري لكل الحسابات (طالب + ولي أمر)
+    errs.parentPhone = validatePhone(form.parentPhone, { label: 'رقم ولي الأمر', required: true });
     errs.studentPhone = isParent ? validatePhone(form.studentPhone, { label: 'رقم الطالب', required: true }) : null;
     errs.email = validateEmail(form.email);
     errs.password = validatePassword(form.password);
@@ -266,12 +267,13 @@ export default function Register() {
                     />
                     <Input
                       name="parentPhone"
-                      label="موبايل ولي الأمر (اختياري)"
+                      label="موبايل ولي الأمر *"
                       placeholder="01xxxxxxxxx"
                       dir="ltr"
                       value={form.parentPhone}
                       onChange={(e) => setForm({ ...form, parentPhone: e.target.value })}
                       error={errors.parentPhone}
+                      required
                     />
                   </div>
                 )}

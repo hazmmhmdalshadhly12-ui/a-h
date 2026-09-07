@@ -1,12 +1,46 @@
+import { useEffect, useState } from 'react';
 import AdminHeader from '../../../components/admin/AdminHeader.jsx';
 import Card from '../../../components/ui/Card.jsx';
 import Badge from '../../../components/ui/Badge.jsx';
 import Icon from '../../../components/ui/Icon.jsx';
+import Input from '../../../components/ui/Input.jsx';
+import Button from '../../../components/ui/Button.jsx';
+import { useToast } from '../../../components/ui/Toast.jsx';
 import { isSupabaseConfigured } from '../../../lib/supabaseClient.js';
 import { SITE } from '../../../config/site.js';
+import { supabase } from '../../../lib/supabaseClient.js';
 
-/** إعدادات عامة — معلومات الأكاديمية وحالة البيئة */
 export default function Settings() {
+  const toast = useToast();
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    loadEmail();
+  }, []);
+
+  const loadEmail = async () => {
+    const { data } = await supabase.from('admin_settings').select('notification_email').eq('id', 1).maybeSingle();
+    if (data?.notification_email) setEmail(data.notification_email);
+    setLoading(false);
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (email && !email.includes('@')) {
+      toast.error('الإيميل غير صالح');
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase
+      .from('admin_settings')
+      .upsert({ id: 1, notification_email: email.trim() || null });
+    setSaving(false);
+    if (error) return toast.error('فشل الحفظ');
+    toast.success('تم حفظ إيميل الإشعارات');
+  };
+
   const rows = [
     { icon: 'dashboard', label: 'اسم الأكاديمية', value: SITE.name },
     { icon: 'eye', label: 'الشعار', value: SITE.tagline },
@@ -16,7 +50,7 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <AdminHeader title="الإعدادات" subtitle="معلومات عامة عن الأكاديمية وحالة المنصة" />
+      <AdminHeader title="الإعدادات" subtitle="معلومات عامة عن الأكاديمية وإيميل إشعارات الحجوزات" />
 
       <Card className="space-y-4">
         {rows.map((r) => (
@@ -30,6 +64,23 @@ export default function Settings() {
             <Badge color={isSupabaseConfigured && r.label.includes('قاعدة') ? 'success' : 'muted'}>{r.value}</Badge>
           </div>
         ))}
+      </Card>
+
+      <Card>
+        <form onSubmit={handleSave} className="space-y-4">
+          <h2 className="mb-2 font-display text-lg font-bold">إيميل إشعارات الحجز</h2>
+          <p className="text-sm text-muted">هنا هتوصلك رسالة بكل طلب حجز جديد من الطلاب.</p>
+          <Input
+            name="notification_email"
+            type="email"
+            label="إيميل المستر"
+            placeholder="teacher@example.com"
+            dir="ltr"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <Button type="submit" loading={saving}>حفظ الإيميل</Button>
+        </form>
       </Card>
 
       <Card>

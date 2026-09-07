@@ -8,17 +8,30 @@ import Select from '../../components/ui/Select.jsx';
 import Textarea from '../../components/ui/Textarea.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Skeleton from '../../components/ui/Skeleton.jsx';
-import EmptyState from '../../components/ui/EmptyState.jsx';
+import EmptyState from '../../components/ui/EmptyState.jsx'
 import { useToast } from '../../components/ui/Toast.jsx';
 import { GRADES_OPTIONS } from '../../config/constants.js';
 import { PAYMENT_INFO } from '../../config/constants.js';
-import { validateName, validatePhone } from '../../utils/validators.js';
+import { validatePhone } from '../../utils/validators.js';
 import { getFriendlyError } from '../../utils/errors.js';
+import { supabase } from '../../lib/supabaseClient.js';
 
 function currentMonth() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
+
+// إرسال إيميل إشعار للمستر عند الحجز
+const sendBookingNotification = async (bookingData, studentData) => {
+  try {
+    const { error } = await supabase.functions.invoke('send-booking-email', {
+      body: { bookingData, studentData }
+    });
+    if (error) console.warn('Booking notification email failed:', error.message);
+  } catch (err) {
+    console.warn('Booking notification email failed:', err);
+  }
+};
 
 export default function Bookings() {
   const { profile } = useAuth();
@@ -27,10 +40,6 @@ export default function Bookings() {
   const isProfessional = profile?.grade === 'professional';
 
   const [form, setForm] = useState({
-    full_name: profile?.full_name || '',
-    phone: profile?.phone || '',
-    parent_phone: profile?.parent_phone || '',
-    grade: profile?.grade || 'first_secondary',
     month: currentMonth(),
     notes: '',
     transfer_number: ''
@@ -40,14 +49,11 @@ export default function Bookings() {
   const [showPayment, setShowPayment] = useState(false);
 
   // المبلغ حسب الصف: أولى = 150، ثانية = 250 (الاحترافي بيشترك من جوه الكورس)
-  const amount = PAYMENT_INFO.amounts[form.grade] || PAYMENT_INFO.amounts.first_secondary;
+  const amount = PAYMENT_INFO.amounts[profile?.grade] || PAYMENT_INFO.amounts.first_secondary;
   const instagram = PAYMENT_INFO.instagramNumber;
 
   const validate = () => {
     const errs = {};
-    errs.full_name = validateName(form.full_name);
-    errs.phone = validatePhone(form.phone, { required: true });
-    errs.parent_phone = validatePhone(form.parent_phone, { label: 'رقم ولي الأمر' });
     if (!form.month) errs.month = 'اختر شهر الحجز';
     if (!form.transfer_number.trim()) errs.transfer_number = 'اكتب الرقم اللي حولت منه';
     setErrors(errs);
@@ -66,10 +72,11 @@ export default function Bookings() {
 
     setSubmitting(true);
     const { error } = await requestBooking({
-      fullName: form.full_name,
-      phone: form.phone,
-      parentPhone: form.parent_phone,
-      grade: form.grade,
+      // البيانات بتوخذ من البروفايل تلقائياً في الـ hook
+      fullName: profile.full_name,
+      phone: profile.phone,
+      parentPhone: profile.parent_phone,
+      grade: profile.grade,
       month: form.month,
       notes: form.notes,
       transferNumber: form.transfer_number.trim()
@@ -79,6 +86,11 @@ export default function Bookings() {
       toast.error(getFriendlyError(error, 'فشل الحجز'));
       return;
     }
+    // إرسال إيميل للمستر في الخلفية (مش محتاجين ننتظره)
+    sendBookingNotification(
+      { grade: profile.grade, month: form.month, notes: form.notes, transfer_number: form.transfer_number.trim() },
+      { full_name: profile.full_name, phone: profile.phone, parent_phone: profile.parent_phone }
+    );
     toast.success('تم إتمام الطلب — قيد مراجعة المستر، وكمل الخطوات اللي جوة رسالة الدفع');
     setShowPayment(false);
     reload();
@@ -103,7 +115,7 @@ export default function Bookings() {
           <div className="rounded-lens border border-signal/40 bg-signal/10 p-4">
             <h3 className="font-display text-base font-black text-paper">رسالة الدفع 💳</h3>
             <ul className="mt-2 list-inside list-disc space-y-1.5 text-sm leading-relaxed text-paper/90">
-              <li>حوّل <b>{amount} جنيه</b> {form.grade === 'second_secondary' ? 'للصف الثاني الثانوي' : 'للصف الأول الثانوي'}</li>
+              <li>حوّل <b>{amount} جنيه</b> {profile?.grade === 'second_secondary' ? 'للصف الثاني الثانوي' : 'للصف الأول الثانوي'}</li>
               <li>على رقم الإنستجرام: <b dir="ltr" className="font-mono">{instagram}</b></li>
               <li>محفظة كاش غير متوفر الآن — التحويل يكون من رقم مضمون بإسمك</li>
             </ul>
@@ -122,42 +134,6 @@ export default function Bookings() {
                 required
               />
             </div>
-            <Input
-              name="full_name"
-              label="الاسم الكامل *"
-              value={form.full_name}
-              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-              error={errors.full_name}
-              required
-            />
-            <Input
-              name="phone"
-              label="رقم موبايل الطالب *"
-              dir="ltr"
-              placeholder="01xxxxxxxxx"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              error={errors.phone}
-              required
-            />
-            <Input
-              name="parent_phone"
-              label="رقم ولي الأمر *"
-              dir="ltr"
-              placeholder="01xxxxxxxxx"
-              value={form.parent_phone}
-              onChange={(e) => setForm({ ...form, parent_phone: e.target.value })}
-              error={errors.parent_phone}
-              required
-            />
-            <Select
-              name="grade"
-              label="الصف الدراسي *"
-              value={form.grade}
-              onChange={(e) => setForm({ ...form, grade: e.target.value })}
-              options={GRADES_OPTIONS}
-              required
-            />
             <Input
               name="month"
               label="شهر الحجز *"

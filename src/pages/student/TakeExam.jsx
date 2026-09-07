@@ -117,6 +117,12 @@ export default function TakeExam() {
       // لو حد حاول يسلم مرتين → الخطأ بييجي من الـ unique constraint نفسها
       if (error.code === '23505' || error.message?.includes('already submitted') || error.message?.includes('محاولة واحدة')) {
         toast.error('انت سلّمت هذا الامتحان من قبل — محاولة واحدة فقط');
+      } else if (error.message?.includes('مشتركين مؤكدين') || error.message?.includes('الحجز')) {
+        toast.error('الامتحانات متاحة للمشتركين المؤكدين فقط — راجع حالة حجزك في صفحة الحجوزات');
+      } else if (error.message?.includes('لم يبدأ') || error.message?.includes('انتهى وقت')) {
+        toast.error('وقت الامتحان غير متاح حالياً');
+      } else if (error.message?.includes('ليس لصفك')) {
+        toast.error('هذا الامتحان ليس لصفك الحالي');
       } else {
         toast.error(getFriendlyError(error, 'فشل التسليم، حاول مرة أخرى'));
       }
