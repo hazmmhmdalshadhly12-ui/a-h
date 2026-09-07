@@ -50,7 +50,60 @@ export async function deleteCourse(courseId) {
   return supabase.from('courses').delete().eq('id', courseId);
 }
 
+// ===== أقسام ودروس (أدمن) =====
+
+export async function fetchCourseSectionsAdmin(courseId) {
+  if (!courseId) return { data: [], error: null };
+  return supabase.rpc('get_course_sections_admin', { p_course_id: courseId });
+}
+
+export async function addCourseSection(courseId, title, orderIndex = 0) {
+  return supabase.rpc('add_course_section', { p_course_id: courseId, p_title: title, p_order_index: orderIndex });
+}
+
+export async function updateCourseSection(sectionId, title, orderIndex) {
+  return supabase.rpc('update_course_section', { p_section_id: sectionId, p_title: title, p_order_index: orderIndex });
+}
+
+export async function deleteCourseSection(sectionId) {
+  return supabase.rpc('delete_course_section', { p_section_id: sectionId });
+}
+
+export async function addCourseLesson(sectionId, { title, description, videoUrl, videoDuration, orderIndex, isFree }) {
+  return supabase.rpc('add_course_lesson', {
+    p_section_id: sectionId,
+    p_title: title,
+    p_description: description || '',
+    p_video_url: videoUrl || '',
+    p_video_duration: videoDuration || '',
+    p_order_index: orderIndex || 0,
+    p_is_free: isFree || false
+  });
+}
+
+export async function updateCourseLesson(lessonId, { title, description, videoUrl, videoDuration, orderIndex, isFree }) {
+  return supabase.rpc('update_course_lesson', {
+    p_lesson_id: lessonId,
+    p_title: title,
+    p_description: description || '',
+    p_video_url: videoUrl || '',
+    p_video_duration: videoDuration || '',
+    p_order_index: orderIndex || 0,
+    p_is_free: isFree || false
+  });
+}
+
+export async function deleteCourseLesson(lessonId) {
+  return supabase.rpc('delete_course_lesson', { p_lesson_id: lessonId });
+}
+
 // ===== للطلاب (عبر دوال آمنة) =====
+
+/** جلب أقسام الكورس مع الدروس (للطالب) — مع حالة الوصول لكل درس */
+export async function fetchCourseSectionsWithLessons(courseId) {
+  if (!courseId) return { data: [], error: null };
+  return supabase.rpc('get_course_sections_with_lessons', { p_course_id: courseId });
+}
 
 export async function fetchCourseLessons(courseId) {
   if (!courseId) return { data: [], error: null };
