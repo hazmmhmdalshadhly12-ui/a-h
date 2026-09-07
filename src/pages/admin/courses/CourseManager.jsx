@@ -1,355 +1,73 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import AdminHeader from '../../../components/admin/AdminHeader.jsx';
 import Card from '../../../components/ui/Card.jsx';
-import Button from '../../../components/ui/Button.jsx';
-import Badge from '../../../components/ui/Badge.jsx';
-import Icon from '../../../components/ui/Icon.jsx';
 import Input from '../../../components/ui/Input.jsx';
 import Textarea from '../../../components/ui/Textarea.jsx';
 import Select from '../../../components/ui/Select.jsx';
+import Button from '../../../components/ui/Button.jsx';
+import Badge from '../../../components/ui/Badge.jsx';
+import Icon from '../../../components/ui/Icon.jsx';
+import Skeleton from '../../../components/ui/Skeleton.jsx';
 import { useToast } from '../../../components/ui/Toast.jsx';
-import {
-  fetchCourseSectionsAdmin,
-  addCourseSection,
-  updateCourseSection,
-  deleteCourseSection,
-  addCourseLesson,
-  updateCourseLesson,
-  deleteCourseLesson
-} from '../../../services/courseService.js';
-import {
-  fetchHomeworks,
-  createHomework,
-  updateHomework,
-  deleteHomework,
-  fetchHomeworkQuestions,
-  createHomeworkQuestion,
-  updateHomeworkQuestion,
-  deleteHomeworkQuestion,
-  fetchSubmissions
-} from '../../../services/homeworkService.js';
-import {
-  fetchCourseFiles,
-  addCourseFile,
-  deleteCourseFile,
-  uploadCourseFile,
-  courseFileDownloadUrl
-} from '../../../services/courseService.js';
-import {
-  fetchCourseComments,
-  deleteCourseComment,
-  togglePinComment
-} from '../../../services/courseService.js';
-import { useAuth } from '../../../hooks/useAuth.js';
-import { HOMEWORK_QUESTION_TYPE_OPTIONS } from '../../../config/constants.js';
+import { fetchCoursesAdmin, fetchCourseSectionsAdmin, addCourseSection, updateCourseSection, deleteCourseSection, addCourseLesson, updateCourseLesson, deleteCourseLesson } from '../../../services/courseService.js';
+import { GRADES } from '../../../config/site.js';
 import { getFriendlyError } from '../../../utils/errors.js';
-import { cn } from '../../../lib/utils.js';
-import { formatDateTime } from '../../../utils/formatDate.js';
+import { supabase } from '../../../lib/supabaseClient.js';
 
-/** إدارة محتويات الكورس: الأقسام + الدروس + الواجبات + الملفات + التعليقات */
+const QUESTION_TYPES = [
+  { value: 'mcq', label: 'اختيار من متعدد' },
+  { value: 'true_false', label: 'صح / غلط' },
+  { value: 'short_answer', label: 'سؤال مقالي قصير' }
+];
+
+const EMPTY_QUESTION = {
+  question_text: '',
+  type: 'mcq',
+  options: [],
+  correct_answer: '',
+  points: 1,
+  order_index: 0
+};
+
 export default function CourseManager() {
   const { courseId } = useParams();
-  const { profile } = useAuth();
+  const navigate = useNavigate();
   const toast = useToast();
 
+  const [course, setCourse] = useState(null);
   const [sections, setSections] = useState([]);
-  const [homeworks, setHomeworks] = useState([]);
-  const [files, setFiles] = useState([]);
-  const [comments, setComments] = useState([]);
-  const [tab, setTab] = useState('sections');
+  const [activeSectionId, setActiveSectionId] = useState(null);
+  const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [sectionSubmitting, setSectionSubmitting] = useState(false);
+  const [questionSubmitting, setQuestionSubmitting] = useState(false);
 
-  // فورم قسم
   const [sectionForm, setSectionForm] = useState({ title: '', order_index: 1 });
   const [editingSection, setEditingSection] = useState(null);
-  const [sectionSubmitting, setSectionSubmitting] = useState(false);
 
-  // فورم درس
-  const [lessonForm, setLessonForm] = useState({ 
-    section_id: '', title: '', description: '', video_url: '', video_duration: '', order_index: 1, is_free: false 
-  });
-  const [editingLesson, setEditingLesson] = useState(null);
-  const [lessonSubmitting, setLessonSubmitting] = useState(false);
+  const [questionForm, setQuestionForm] = useState(EMPTY_QUESTION);
+  const [editingQuestion, setEditingQuestion] = useState(null);
 
-  // فورم واجب
-  const [hwForm, setHwForm] = useState({ title: '', description: '', order_index: 1 });
-  const [editingHw, setEditingHw] = useState(null);
-  const [hwSubmitting, setHwSubmitting] = useState(false);
+  useEffect(() => {
+    loadCourse();
+    loadSections();
+  }, [courseId]);
 
-  // أسئلة واجب
-  const [activeHw, setActiveHw] = useState(null);
-  const [questions, setQuestions] = useState([]);
-  const [qForm, setQForm] = useState({ question_text: '', type: 'mcq', options: '', correct_answer: '', points: 1 });
-  const [editingQ, setEditingQ] = useState(null);
-  const [qSubmitting, setQSubmitting] = useState(false);
-  const [submissions, setSubmissions] = useState([]);
+  const loadCourse = async () => {
+    const { data } = await supabase.from('courses').select('*').eq('id', courseId).maybeSingle();
+    if (data) setCourse(data);
+  };
 
-  // ملفات
-  const [fileForm, setFileForm] = useState({ title: '' });
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [fileSubmitting, setFileSubmitting] = useState(false);
-
-  const load = async () => {
-    const [s, h, f, c] = await Promise.all([
-      fetchCourseSectionsAdmin(courseId),
-      fetchHomeworks(courseId),
-      fetchCourseFiles(courseId),
-      fetchCourseComments(courseId)
-    ]);
-    setSections(s.data || []);
-    setHomeworks(h.data || []);
-    setFiles(f.data || []);
-    setComments(c.data || []);
+  const loadSections = async () => {
+    const { data } = await fetchCourseSectionsAdmin(courseId);
+    if (data) {
+      data.forEach(s => s.questions?.sort((a, b) => a.order_index - b.order_index));
+      setSections(data);
+    }
     setLoading(false);
   };
 
-  useEffect(() => {
-    if (courseId) load();
-  }, [courseId]);
-
-  const loadQuestions = async (hwId) => {
-    setActiveHw(hwId);
-    const [q, s] = await Promise.all([fetchHomeworkQuestions(hwId), fetchSubmissions(hwId)]);
-    setQuestions(q.data || []);
-    setSubmissions(s.data || []);
-    setEditingQ(null);
-    setQForm({ question_text: '', type: 'mcq', options: '', correct_answer: '', points: 1 });
-  };
-
-  // ===== المحاضرات =====
-  const submitLesson = async (e) => {
-    e.preventDefault();
-    if (!lessonForm.title.trim()) return toast.error('اكتب عنوان المحاضرة');
-    setLessonSubmitting(true);
-    const payload = {
-      title: lessonForm.title.trim(),
-      video_url: lessonForm.video_url || null,
-      content: lessonForm.content || null,
-      order_index: Number(lessonForm.order_index) || 1
-    };
-    const { error } = editingLesson
-      ? await updateLesson(editingLesson.id, payload)
-      : await createLesson({ courseId, ...payload });
-    setLessonSubmitting(false);
-    if (error) return toast.error(getFriendlyError(error, 'فشل الحفظ'));
-    toast.success(editingLesson ? 'تم تحديث المحاضرة' : 'تمت إضافة المحاضرة');
-    setEditingLesson(null);
-    setLessonForm({ title: '', video_url: '', content: '', order_index: 1 });
-    load();
-  };
-
-  const startEditLesson = (l) => {
-    setEditingLesson(l);
-    setLessonForm({ title: l.title || '', video_url: l.video_url || '', content: l.content || '', order_index: l.order_index || 1 });
-  };
-
-  const removeLesson = async (id) => {
-    if (!window.confirm('حذف هذه المحاضرة؟')) return;
-    const { error } = await deleteLesson(id);
-    if (error) return toast.error('فشل الحذف');
-    toast.success('تم الحذف');
-    load();
-  };
-
-  // ===== الواجبات =====
-  const submitHw = async (e) => {
-    e.preventDefault();
-    if (!hwForm.title.trim()) return toast.error('اكتب عنوان الواجب');
-    setHwSubmitting(true);
-    const payload = {
-      title: hwForm.title.trim(),
-      description: hwForm.description || null,
-      order_index: Number(hwForm.order_index) || 1
-    };
-    const { error } = editingHw
-      ? await updateHomework(editingHw.id, payload)
-      : await createHomework({ courseId, ...payload });
-    setHwSubmitting(false);
-    if (error) return toast.error(getFriendlyError(error, 'فشل الحفظ'));
-    toast.success(editingHw ? 'تم تحديث الواجب' : 'تمت إضافة الواجب');
-    setEditingHw(null);
-    setHwForm({ title: '', description: '', order_index: 1 });
-    load();
-  };
-
-  const startEditHw = (h) => {
-    setEditingHw(h);
-    setHwForm({ title: h.title || '', description: h.description || '', order_index: h.order_index || 1 });
-  };
-
-  const removeHw = async (id) => {
-    if (!window.confirm('حذف هذا الواجب وكل أسئلته؟')) return;
-    const { error } = await deleteHomework(id);
-    if (error) return toast.error('فشل الحذف');
-    toast.success('تم الحذف');
-    if (activeHw === id) setActiveHw(null);
-    load();
-  };
-
-  // ===== أسئلة الواجب =====
-  const submitQuestion = async (e) => {
-    e.preventDefault();
-    if (!qForm.question_text.trim()) return toast.error('اكتب نص السؤال');
-    setQSubmitting(true);
-    const options = qForm.type === 'mcq' && qForm.options.trim()
-      ? qForm.options.split('\n').map((s) => s.trim()).filter(Boolean)
-      : null;
-    const payload = {
-      questionText: qForm.question_text.trim(),
-      type: qForm.type,
-      options,
-      correctAnswer: qForm.correct_answer.trim() || null,
-      points: Number(qForm.points) || 1
-    };
-    const { error } = editingQ
-      ? await updateHomeworkQuestion(editingQ.id, {
-          question_text: payload.questionText,
-          type: payload.type,
-          options: payload.options,
-          correct_answer: payload.correctAnswer,
-          points: payload.points
-        })
-      : await createHomeworkQuestion({ homeworkId: activeHw, ...payload });
-    setQSubmitting(false);
-    if (error) return toast.error(getFriendlyError(error, 'فشل الحفظ'));
-    toast.success(editingQ ? 'تم تحديث السؤال' : 'تمت إضافة السؤال');
-    setEditingQ(null);
-    setQForm({ question_text: '', type: 'mcq', options: '', correct_answer: '', points: 1 });
-    loadQuestions(activeHw);
-  };
-
-  const startEditQ = (q) => {
-    setEditingQ(q);
-    setQForm({
-      question_text: q.question_text || '',
-      type: q.type || 'mcq',
-      options: Array.isArray(q.options) ? q.options.join('\n') : '',
-      correct_answer: q.correct_answer || '',
-      points: q.points || 1
-    });
-  };
-
-  const removeQ = async (id) => {
-    if (!window.confirm('حذف هذا السؤال؟')) return;
-    const { error } = await deleteHomeworkQuestion(id);
-    if (error) return toast.error('فشل الحذف');
-    toast.success('تم الحذف');
-    loadQuestions(activeHw);
-  };
-
-  // ===== الملفات =====
-  const submitFile = async (e) => {
-    e.preventDefault();
-    if (!fileForm.title.trim()) return toast.error('اكتب اسم الملف');
-    if (!selectedFile) return toast.error('اختر ملف PDF أو ZIP الأول');
-    setFileSubmitting(true);
-
-    const { data: upload, error: upErr } = await uploadCourseFile(selectedFile, { courseId, studentId: profile?.id });
-    if (upErr) {
-      setFileSubmitting(false);
-      return toast.error(getFriendlyError(upErr, 'فشل رفع الملف — جرب ملف أصغر أو راجع الصلاحيات'));
-    }
-
-    const { error } = await addCourseFile(courseId, {
-      title: fileForm.title.trim(),
-      fileUrl: upload.fileUrl,
-      fileType: upload.fileType
-    });
-    setFileSubmitting(false);
-    if (error) return toast.error(getFriendlyError(error, 'فشل الحفظ'));
-    toast.success('تم رفع الملف');
-    setFileForm({ title: '' });
-    setSelectedFile(null);
-    load();
-  };
-
-  const removeFile = async (id) => {
-    if (!window.confirm('حذف هذا الملف؟')) return;
-    const { error } = await deleteCourseFile(id);
-    if (error) return toast.error('فشل الحذف');
-    toast.success('تم الحذف');
-    load();
-  };
-
-  // ===== التعليقات =====
-  const handleDeleteComment = async (id) => {
-    if (!window.confirm('حذف هذا التعليق؟')) return;
-    const { error } = await deleteCourseComment(id);
-    if (error) return toast.error(getFriendlyError(error, 'فشل الحذف'));
-    toast.success('تم حذف التعليق');
-    load();
-  };
-
-  const handlePinComment = async (id) => {
-    const { error } = await togglePinComment(id);
-    if (error) return toast.error(getFriendlyError(error, 'فشل التحديث'));
-    toast.success('تم التحديث');
-    load();
-  };
-
-  const renderOptionsHint = (q) => {
-    if (q.type === 'true_false') {
-      return <span className="text-xs text-muted">الإجابة الصحيحة: {q.correct_answer === 'true' ? 'صح ✓' : q.correct_answer === 'false' ? 'غلط ✗' : q.correct_answer || '—'}</span>;
-    }
-    const opts = Array.isArray(q.options) ? q.options : [];
-    return (
-      <span className="text-xs text-muted">
-        الاختيارات: {opts.join(' • ') || '—'} — الصحيح: {q.correct_answer || '—'}
-      </span>
-    );
-  };
-
-  const tabs = [
-    { key: 'sections', label: `الأقسام والدروس` },
-    { key: 'homeworks', label: `الواجبات (${homeworks.length})` },
-    { key: 'files', label: `الملفات (${files.length})` },
-    { key: 'comments', label: `التعليقات (${comments.length})` }
-  ];
-
-  return (
-    <div className="space-y-6">
-      <AdminHeader
-        title="إدارة محتوى الدرس"
-        subtitle="المحاضرات + الواجبات + الملفات (PDF/ZIP) + التعليقات"
-        actions={
-          <Link to="/admin/courses">
-            <Button size="sm" variant="secondary">
-              <Icon name="chevronRight" className="h-4 w-4" /> كل الكورسات
-            </Button>
-          </Link>
-        }
-      />
-
-      {/* تبويبات */}
-      <div className="flex flex-wrap gap-2">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={cn(
-              'focus-ring rounded-lens px-4 py-2 text-sm font-bold transition',
-              tab === t.key ? 'bg-signal text-ink' : 'bg-ink-800 text-muted hover:text-paper'
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-const renderOptionsHint = (q) => {
-    if (q.type === 'true_false') {
-      return <span className="text-xs text-muted">الاجابة الصحيحة: {q.correct_answer === 'true' ? 'صح' : q.correct_answer === 'false' ? 'غلط' : q.correct_answer || '-'}</span>;
-    }
-    const opts = Array.isArray(q.options) ? q.options : [];
-    return (
-      <span className="text-xs text-muted">
-        الاختيارات: {opts.join(' | ') || '-'} - الصحيح: {q.correct_answer || '-'}
-      </span>
-    );
-  };
-
-  // ===== الأقسام والدروس =====
   const submitSection = async (e) => {
     e.preventDefault();
     if (!sectionForm.title.trim()) return toast.error('اكتب عنوان القسم');
@@ -362,7 +80,7 @@ const renderOptionsHint = (q) => {
     toast.success(editingSection ? 'تم تحديث القسم' : 'تمت إضافة القسم');
     setEditingSection(null);
     setSectionForm({ title: '', order_index: 1 });
-    load();
+    loadSections();
   };
 
   const startEditSection = (s) => {
@@ -374,338 +92,220 @@ const renderOptionsHint = (q) => {
     if (!window.confirm('حذف هذا القسم وكل دروسه؟')) return;
     const { error } = await deleteCourseSection(sectionId);
     if (error) return toast.error(getFriendlyError(error, 'فشل الحذف'));
-    toast.success('تم الحذف');
-    load();
+    toast.success('تم حذف القسم');
+    loadSections();
   };
 
-  // ===== الدروس =====
-  const submitLesson = async (e) => {
+  // ==================== الأسئلة ====================
+
+  const renderOptionsHint = (q) => {
+    if (q.type === 'true_false') {
+      return <span className="text-xs text-muted">الاجابة الصحيحة: {q.correct_answer === 'true' ? 'صح' : q.correct_answer === 'false' ? 'غلط' : q.correct_answer || '-'}</span>;
+    }
+    const opts = Array.isArray(q.options) ? q.options : [];
+    return (
+      <span className="text-xs text-muted">
+        الاختيارات: {opts.join(' | ') || '-'} - الصحيح: {q.correct_answer || '-'}
+      </span>
+    );
+  };
+
+  // ==================== الأسئلة ====================
+  const loadQuestions = async (sectionId) => {
+    setActiveSectionId(sectionId);
+    const { data } = await supabase
+      .from('course_questions')
+      .select('*')
+      .eq('section_id', sectionId)
+      .order('order_index', { ascending: true });
+    setQuestions(data || []);
+  };
+
+  const submitQuestion = async (e) => {
     e.preventDefault();
-    if (!lessonForm.title.trim()) return toast.error('اكتب عنوان الدرس');
-    if (!lessonForm.section_id) return toast.error('اختار القسم');
-    setLessonSubmitting(true);
-    const payload = {
-      title: lessonForm.title.trim(),
-      description: lessonForm.description || '',
-      video_url: lessonForm.video_url || '',
-      video_duration: lessonForm.video_duration || '',
-      order_index: Number(lessonForm.order_index) || 1,
-      is_free: lessonForm.is_free
-    };
-    const { error } = editingLesson
-      ? await updateCourseLesson(editingLesson.lesson_id, payload)
-      : await addCourseLesson(lessonForm.section_id, payload);
-    setLessonSubmitting(false);
+    if (!questionForm.question_text.trim()) return toast.error('اكتب نص السؤال');
+    if (questionForm.type === 'mcq' && (!questionForm.options || questionForm.options.filter(Boolean).length < 2)) {
+      return toast.error('السؤال الاختياري محتاج على الأقل خيارين');
+    }
+    if (!questionForm.correct_answer) return toast.error('اختار الإجابة الصحيحة');
+
+    setQuestionSubmitting(true);
+    const payload = { ...questionForm, section_id: activeSectionId };
+    const { error } = editingQuestion
+      ? await supabase.from('course_questions').update(payload).eq('id', editingQuestion)
+      : await supabase.from('course_questions').insert(payload);
+    setQuestionSubmitting(false);
     if (error) return toast.error(getFriendlyError(error, 'فشل الحفظ'));
-    toast.success(editingLesson ? 'تم تحديث الدرس' : 'تمت إضافة الدرس');
-    setEditingLesson(null);
-    setLessonForm({ section_id: '', title: '', description: '', video_url: '', video_duration: '', order_index: 1, is_free: false });
-    load();
+    toast.success(editingQuestion ? 'تم تحديث السؤال' : 'تمت إضافة السؤال');
+    resetQuestionForm();
+    loadQuestions(activeSectionId);
   };
 
-  const startEditLesson = (l) => {
-    setEditingLesson(l);
-    setLessonForm({
-      section_id: l.section_id,
-      title: l.lesson_title || '',
-      description: l.lesson_description || '',
-      video_url: l.lesson_video_url || '',
-      video_duration: l.lesson_video_duration || '',
-      order_index: l.lesson_order || 1,
-      is_free: l.lesson_is_free || false
+  const startEditQuestion = (q) => {
+    setEditingQuestion(q.id);
+    setQuestionForm({
+      question_text: q.question_text || '',
+      type: q.type,
+      options: q.options || [],
+      correct_answer: q.correct_answer || '',
+      points: q.points || 1,
+      order_index: q.order_index || 0
     });
   };
 
-  const removeLesson = async (lessonId) => {
-    if (!window.confirm('حذف هذا الدرس؟')) return;
-    const { error } = await deleteCourseLesson(lessonId);
+  const removeQuestion = async (id) => {
+    if (!window.confirm('متأكد تحذف السؤال؟')) return;
+    const { error } = await supabase.from('course_questions').delete().eq('id', id);
     if (error) return toast.error(getFriendlyError(error, 'فشل الحذف'));
-    toast.success('تم الحذف');
-    load();
+    toast.success('تم حذف السؤال');
+    loadQuestions(activeSectionId);
   };
 
-  const tabs = [
-    { key: 'sections', label: `الأقسام والدروس` },
-    { key: 'homeworks', label: `الواجبات (${homeworks.length})` },
-    { key: 'files', label: `الملفات (${files.length})` },
-    { key: 'comments', label: `التعليقات (${comments.length})` }
-  ];
-        <div className="space-y-5">
-          <Card>
-            <h2 className="mb-4 font-display text-lg font-bold">رفع ملف (PDF أو ZIP)</h2>
-            <form onSubmit={submitFile} className="space-y-4">
-              <Input
-                name="title"
-                label="اسم الملف (اللي الطالب هيشوفه) *"
-                placeholder="مثال: ملخص الفصل الأول PDF"
-                value={fileForm.title}
-                onChange={(e) => setFileForm({ ...fileForm, title: e.target.value })}
-                required
-              />
-              <input
-                type="file"
-                accept=".pdf,.zip"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                className="focus-ring block w-full rounded-lens border border-ink-600 bg-ink-900 px-3 py-2 text-sm text-paper file:mr-3 file:rounded-lens file:border-0 file:bg-signal/15 file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-signal"
-              />
-              <Button type="submit" loading={fileSubmitting}>رفع الملف</Button>
-            </form>
-          </Card>
+  const resetQuestionForm = () => {
+    setEditingQuestion(null);
+    setQuestionForm(EMPTY_QUESTION);
+  };
 
-          {files.length === 0 ? (
-            <Card className="text-center text-muted">لا توجد ملفات في هذا الدرس بعد.</Card>
-          ) : (
-            <Card>
-              <h3 className="mb-3 font-display text-sm font-bold text-paper">الملفات ({files.length})</h3>
-              <ul className="divide-y divide-ink-700/60">
-                {files.map((f) => (
-                  <li key={f.file_id} className="flex items-center justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-paper">
-                        <Badge color={f.file_type === 'pdf' ? 'danger' : f.file_type === 'zip' ? 'warning' : 'muted'}>
-                          {f.file_type === 'pdf' ? 'PDF' : f.file_type === 'zip' ? 'ZIP' : 'ملف'}
-                        </Badge>{' '}
-                        {f.title}
-                      </p>
-                      <p className="text-xs text-muted">
-                        رفعه: {f.uploader_name || '—'} • {formatDateTime(f.created_at)}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <a href={courseFileDownloadUrl(f)} target="_blank" rel="noreferrer" download>
-                        <Button size="sm" variant="secondary">
-                          <Icon name="download" className="h-3.5 w-3.5" />
-                        </Button>
-                      </a>
-                      <Button size="sm" variant="danger" onClick={() => removeFile(f.file_id)}>
-                        <Icon name="trash" className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-        </div>
-      ) : tab === 'comments' ? (
-        <Card>
-          <h3 className="mb-4 font-display text-lg font-bold">
-            تعليقات الطلاب ({comments.length}) — <span className="text-xs font-normal text-muted">تثبّت المهم وامسح أي تعليق</span>
-          </h3>
-          {comments.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted">لا توجد تعليقات بعد.</p>
-          ) : (
-            <ul className="divide-y divide-ink-700/60">
-              {comments.map((c) => (
-                <li key={c.comment_id} className="flex items-start justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="flex items-center gap-2 text-xs text-muted">
-                      <span className="font-semibold text-paper">{c.student_name || 'طالب'}</span>
-                      {c.is_pinned && <Badge color="warning">📌 مثبّت</Badge>}
-                      <span>{formatDateTime(c.created_at)}</span>
-                    </p>
-                    <p className="mt-1 text-sm leading-relaxed text-paper">{c.body}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <Button size="sm" variant="secondary" onClick={() => handlePinComment(c.comment_id)}>
-                      {c.is_pinned ? 'فك تثبيت' : 'تثبيت'}
-                    </Button>
-                    <Button size="sm" variant="danger" onClick={() => handleDeleteComment(c.comment_id)}>
-                      <Icon name="trash" className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      ) : (
-        <div className="space-y-5">
-          <Card>
-            <h2 className="mb-4 font-display text-lg font-bold">{editingHw ? 'تعديل واجب' : 'إضافة واجب'}</h2>
-            <form onSubmit={submitHw} className="grid gap-4 sm:grid-cols-2">
-              <Input
-                name="title"
-                label="عنوان الواجب *"
-                value={hwForm.title}
-                onChange={(e) => setHwForm({ ...hwForm, title: e.target.value })}
-                required
-              />
-              <Input
-                name="order_index"
-                label="الترتيب"
-                type="number"
-                min="1"
-                value={hwForm.order_index}
-                onChange={(e) => setHwForm({ ...hwForm, order_index: e.target.value })}
-              />
-              <div className="sm:col-span-2">
-                <Textarea
-                  name="description"
-                  label="وصف الواجب"
-                  rows={2}
-                  value={hwForm.description}
-                  onChange={(e) => setHwForm({ ...hwForm, description: e.target.value })}
-                />
+  const handleOptionChange = (index, value) => {
+    const opts = [...questionForm.options];
+    opts[index] = value;
+    setQuestionForm({ ...questionForm, options: opts });
+  };
+
+  const addOption = () => {
+    setQuestionForm({ ...questionForm, options: [...questionForm.options, ''] });
+  };
+
+  const removeOption = (index) => {
+    const opts = questionForm.options.filter((_, i) => i !== index);
+    setQuestionForm({ ...questionForm, options: opts });
+  };
+
+  const setCorrectAnswer = (answer) => {
+    setQuestionForm({ ...questionForm, correct_answer: answer });
+  };
+
+  if (loading) return <div className="flex items-center justify-center h-64"><Skeleton className="h-8 w-64" /></div>;
+
+  return (
+    <div className="space-y-6">
+      <AdminHeader
+        title={course?.title || 'إدارة الكورس'}
+        subtitle="إدارة الأقسام والأسئلة — الأسئلة بتتعرض للطلاب في الامتحانات"
+        actions={<Button variant="secondary" onClick={() => navigate(-1)}>رجوع للكورسات</Button>}
+      />
+
+      {/* نموذج إضافة/تعديل قسم */}
+      <Card className="space-y-4">
+        <h2 className="font-display text-lg font-bold">{editingSection ? 'تعديل القسم' : 'إضافة قسم جديد'}</h2>
+        <form onSubmit={submitSection} className="grid gap-4 sm:grid-cols-2">
+          <Input name="title" label="عنوان القسم *" value={sectionForm.title} onChange={e => setSectionForm({...sectionForm, title: e.target.value})} required />
+          <Input name="order_index" label="الترتيب *" type="number" value={sectionForm.order_index} onChange={e => setSectionForm({...sectionForm, order_index: e.target.value})} required />
+          <div className="sm:col-span-2 flex gap-2">
+            <Button type="submit" loading={sectionSubmitting}>{editingSection ? 'حفظ التعديل' : 'إضافة القسم'}</Button>
+            {editingSection && <Button type="button" variant="ghost" onClick={() => { setEditingSection(null); setSectionForm({ title: '', order_index: 1 }); }}>إلغاء</Button>}
+          </div>
+        </form>
+      </Card>
+
+      {/* قائمة الأقسام */}
+      <div className="space-y-4">
+        {sections.length === 0 ? (
+          <Card className="text-center py-8 text-muted">لا توجد أقسام — أضف أول قسم من فوق.</Card>
+        ) : sections.map((section) => (
+          <Card key={section.section_id} className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-display text-lg font-bold">{section.section_title}</h3>
+                <p className="text-sm text-muted">ترتيب: {section.section_order} • {section.questions?.length || 0} أسئلة</p>
               </div>
-              <div className="flex items-end gap-2">
-                <Button type="submit" loading={hwSubmitting}>{editingHw ? 'حفظ' : 'إضافة الواجب'}</Button>
-                {editingHw && (
-                  <Button type="button" variant="secondary" onClick={() => { setEditingHw(null); setHwForm({ title: '', description: '', order_index: 1 }); }}>
-                    إلغاء
-                  </Button>
-                )}
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => loadQuestions(section.section_id)}>
+                  <span>الأسئلة</span>
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => startEditSection(section)}>تعديل</Button>
+                <Button variant="ghost" size="sm" className="text-danger" onClick={() => removeSection(section.section_id)}>حذف</Button>
               </div>
-            </form>
-          </Card>
+            </div>
 
-          {homeworks.length === 0 ? (
-            <Card className="text-center text-muted">لا توجد واجبات في هذا الدرس بعد.</Card>
-          ) : (
-            homeworks.map((h) => (
-              <Card key={h.id} className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="font-semibold text-paper">
-                      <span className="font-mono text-muted">#{h.order_index} </span>
-                      {h.title}
-                    </p>
-                    {h.description && <p className="text-sm text-muted">{h.description}</p>}
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Button size="sm" variant={activeHw === h.id ? '' : 'secondary'} onClick={() => loadQuestions(h.id)}>
-                      <Icon name="edit" className="h-3.5 w-3.5" /> الأسئلة
-                    </Button>
-                    <Button size="sm" variant="secondary" onClick={() => startEditHw(h)}>
-                      <Icon name="edit" className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button size="sm" variant="danger" onClick={() => removeHw(h.id)}>
-                      <Icon name="trash" className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
+            {activeSectionId === section.section_id && (
+              <div className="space-y-4 border-t border-ink-700/60 pt-4">
+                <h4 className="font-display font-bold">أسئلة القسم</h4>
 
-                {activeHw === h.id && (
-                  <div className="space-y-4 rounded-lens bg-ink-800/60 p-4">
-                    <div>
-                      <h3 className="mb-3 font-display text-sm font-bold text-paper">
-                        أسئلة الواجب ({questions.length})
-                      </h3>
-                      <form onSubmit={submitQuestion} className="space-y-3">
-                        <Textarea
-                          name="question_text"
-                          label="نص السؤال *"
-                          rows={2}
-                          value={qForm.question_text}
-                          onChange={(e) => setQForm({ ...qForm, question_text: e.target.value })}
-                          required
-                        />
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <Select
-                            name="type"
-                            label="النوع"
-                            value={qForm.type}
-                            onChange={(e) => setQForm({ ...qForm, type: e.target.value, options: '', correct_answer: '' })}
-                            options={HOMEWORK_QUESTION_TYPE_OPTIONS}
-                          />
-                          <Input
-                            name="points"
-                            label="الدرجة"
-                            type="number"
-                            min="0"
-                            value={qForm.points}
-                            onChange={(e) => setQForm({ ...qForm, points: e.target.value })}
-                          />
-                        </div>
-                        {qForm.type === 'mcq' ? (
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <Textarea
-                              name="options"
-                              label="الاختيارات (كل اختيار في سطر)"
-                              rows={3}
-                              dir="rtl"
-                              value={qForm.options}
-                              onChange={(e) => setQForm({ ...qForm, options: e.target.value })}
-                            />
-                            <Input
-                              name="correct_answer"
-                              label="الإجابة الصحيحة (من غير اختلاف — نفس نص الاختيار)"
-                              value={qForm.correct_answer}
-                              onChange={(e) => setQForm({ ...qForm, correct_answer: e.target.value })}
-                            />
-                          </div>
-                        ) : (
-                          <Select
-                            name="correct_answer"
-                            label="الإجابة الصحيحة"
-                            value={qForm.correct_answer}
-                            onChange={(e) => setQForm({ ...qForm, correct_answer: e.target.value })}
-                            options={[
-                              { value: 'true', label: 'صح ✓' },
-                              { value: 'false', label: 'غلط ✗' }
-                            ]}
-                          />
-                        )}
-                        <div className="flex items-center gap-2">
-                          <Button type="submit" loading={qSubmitting}>{editingQ ? 'حفظ السؤال' : 'إضافة السؤال'}</Button>
-                          {editingQ && (
-                            <Button type="button" variant="secondary" onClick={() => { setEditingQ(null); setQForm({ question_text: '', type: 'mcq', options: '', correct_answer: '', points: 1 }); }}>
-                              إلغاء
-                            </Button>
-                          )}
-                        </div>
-                      </form>
+                {/* نموذج إضافة/تعديل سؤال */}
+                <Card className="space-y-4 p-4 border-signal/30 bg-signal/5">
+                  <h5 className="font-display font-bold">{editingQuestion ? 'تعديل السؤال' : 'إضافة سؤال جديد'}</h5>
+                  <form onSubmit={submitQuestion} className="space-y-4">
+                    <Input name="question_text" label="نص السؤال *" value={questionForm.question_text} onChange={e => setQuestionForm({...questionForm, question_text: e.target.value})} required />
+                    <Select name="type" label="نوع السؤال" value={questionForm.type} onChange={e => setQuestionForm({...questionForm, type: e.target.value})} options={QUESTION_TYPES} />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Input name="points" label="النقاط" type="number" value={questionForm.points} onChange={e => setQuestionForm({...questionForm, points: e.target.value})} />
+                      <Input name="order_index" label="الترتيب" type="number" value={questionForm.order_index} onChange={e => setQuestionForm({...questionForm, order_index: e.target.value})} />
                     </div>
 
-                    {questions.length > 0 && (
-                      <ul className="divide-y divide-ink-700/60">
-                        {questions.map((q) => (
-                          <li key={q.id} className="flex items-center justify-between gap-3 py-3">
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-paper">
-                                {q.points > 0 && <Badge color="muted">{q.points} نقطة</Badge>}{' '}
-                                {q.question_text}
-                              </p>
-                              {renderOptionsHint(q)}
+                    {questionForm.type === 'mcq' && (
+                      <div className="space-y-2">
+                        <p className="font-medium text-sm text-paper">الخيارات (على الأقل 2):</p>
+                        <div className="space-y-2">
+                          {questionForm.options.map((opt, i) => (
+                            <div key={i} className="flex gap-2">
+                              <Input
+                                name={`option_${i}`}
+                                placeholder={`الخيار ${i + 1}`}
+                                value={opt}
+                                onChange={(e) => handleOptionChange(i, e.target.value)}
+                              />
+                              <button type="button" onClick={() => removeOption(i)} className="focus-ring flex h-10 items-center px-3 text-danger hover:bg-danger/10" aria-label="حذف الخيار">
+                                ✕
+                              </button>
                             </div>
-                            <div className="flex shrink-0 items-center gap-1.5">
-                              <Button size="sm" variant="secondary" onClick={() => startEditQ(q)}>
-                                <Icon name="edit" className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button size="sm" variant="danger" onClick={() => removeQ(q.id)}>
-                                <Icon name="trash" className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-
-                    {submissions.length > 0 && (
-                      <div>
-                        <h4 className="mb-2 font-display text-sm font-bold text-paper">
-                          التسليمات ({submissions.length})
-                        </h4>
-                        <ul className="divide-y divide-ink-700/60 rounded-lens bg-ink-900/50 px-3">
-                          {submissions.map((s) => (
-                            <li key={s.id} className="flex items-center justify-between gap-3 py-2">
-                              <p className="text-sm text-paper">{s.student?.full_name || 'طالب'}</p>
-                              <p className="text-xs text-muted">
-                                {new Date(s.submitted_at).toLocaleDateString('ar-EG')} —{' '}
-                                <span className="font-display font-bold text-signal">{s.auto_score}/{s.total_points}</span>
-                              </p>
-                            </li>
                           ))}
-                        </ul>
+                          <button type="button" onClick={addOption} className="focus-ring text-sm text-signal hover:text-signal-light">+ إضافة خيار</button>
+                        </div>
                       </div>
                     )}
-                  </div>
-                )}
-              </Card>
-            ))
-          )}
-        </div>
-      )}
+
+                    {questionForm.type === 'true_false' && (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <p className="font-medium text-sm text-paper">الإجابة الصحيحة:</p>
+                        <button type="button" onClick={() => setCorrectAnswer('true')} className={`focus-ring rounded-lens px-4 py-2 text-sm font-bold ${questionForm.correct_answer === 'true' ? 'bg-signal text-ink' : 'border border-ink-600 bg-ink-800'}`}>صح</button>
+                        <button type="button" onClick={() => setCorrectAnswer('false')} className={`focus-ring rounded-lens px-4 py-2 text-sm font-bold ${questionForm.correct_answer === 'false' ? 'bg-signal text-ink' : 'border border-ink-600 bg-ink-800'}`}>غلط</button>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button type="submit" loading={questionSubmitting}>{editingQuestion ? 'حفظ التعديل' : 'إضافة السؤال'}</Button>
+                      {editingQuestion && <Button type="button" variant="ghost" onClick={resetQuestionForm}>إلغاء</Button>}
+                    </div>
+                  </form>
+                </Card>
+
+                {/* قائمة الأسئلة */}
+                <div className="space-y-2">
+                  {questions.length === 0 ? (
+                    <p className="text-sm text-muted text-center py-4">لا توجد أسئلة — أضف أول سؤال من فوق.</p>
+                  ) : questions.map((q) => (
+                    <div key={q.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lens border border-ink-600 bg-ink-900/50 px-4 py-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <Badge color="muted">{q.order_index}</Badge>
+                          <Badge color={q.type === 'mcq' ? 'signal' : q.type === 'true_false' ? 'stream' : 'warning'}>{QUESTION_TYPES.find(t => t.value === q.type)?.label || q.type}</Badge>
+                          <span className="font-semibold text-paper truncate">{q.question_text}</span>
+                        </div>
+                        <div className="mt-1 text-xs text-muted">{renderOptionsHint(q)}</div>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <Button variant="outline" size="sm" onClick={() => startEditQuestion(q)}>تعديل</Button>
+                        <Button variant="ghost" size="sm" className="text-danger" onClick={() => removeQuestion(q.id)}>حذف</Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
