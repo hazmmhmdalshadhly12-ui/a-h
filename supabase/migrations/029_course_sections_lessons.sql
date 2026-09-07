@@ -16,13 +16,17 @@ create table if not exists public.course_sections (
   created_at timestamptz not null default now()
 );
 
+-- إضافة الأعمدة لو الجدول موجود من غير الأعمدة دي
+alter table public.course_sections
+  add column if not exists course_id uuid references public.courses(id) on delete cascade;
+
 create index if not exists course_sections_course_idx on public.course_sections (course_id, order_index);
 
 alter table public.course_sections enable row level security;
 
 grant select on public.course_sections to authenticated;
 
--- الطالب يشوف أقسام الكورسات اللي لصفه (أو الاحترافي)
+drop policy if exists "course_sections: student read own grade or professional" on public.course_sections;
 create policy "course_sections: student read own grade or professional"
   on public.course_sections for select to authenticated
   using (
@@ -33,7 +37,7 @@ create policy "course_sections: student read own grade or professional"
     )
   );
 
--- الأدمن يدير الأقسام
+drop policy if exists "course_sections: admin all" on public.course_sections;
 create policy "course_sections: admin all"
   on public.course_sections for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
@@ -46,13 +50,17 @@ create table if not exists public.lessons (
   section_id uuid not null references public.course_sections(id) on delete cascade,
   title text not null,
   description text,
-  video_url text,           -- رابط الفيديو (يوتيوب/مباشر)
-  video_provider text,      -- 'youtube' | 'direct' | 'vimeo'
-  duration_minutes int,     -- مدة الدرس بالدقائق
+  video_url text,
+  video_provider text,
+  duration_minutes int,
   order_index int not null default 0,
-  is_free boolean not null default false, -- درس مجاني (للترويج)
+  is_free boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+-- إضافة الأعمدة لو الجدول موجود من غير الأعمدة دي
+alter table public.lessons
+  add column if not exists section_id uuid references public.course_sections(id) on delete cascade;
 
 create index if not exists lessons_section_idx on public.lessons (section_id, order_index);
 
@@ -60,7 +68,7 @@ alter table public.lessons enable row level security;
 
 grant select on public.lessons to authenticated;
 
--- الطالب يشوف دروس الأقسام اللي لصفه (أو الاحترافي)
+drop policy if exists "lessons: student read own grade or professional" on public.lessons;
 create policy "lessons: student read own grade or professional"
   on public.lessons for select to authenticated
   using (
@@ -72,16 +80,13 @@ create policy "lessons: student read own grade or professional"
     )
   );
 
--- الأدمن يدير الدروس
+drop policy if exists "lessons: admin all" on public.lessons;
 create policy "lessons: admin all"
   on public.lessons for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
 
 -- ============================================================
 -- 3) دالة: هل الطالب يقدر يدخل الدرس؟
---    - لو الدرس مجاني (is_free) → نعم
---    - لو كورس احترافي → لازم حجز مؤكد على نفس الكورس
---    - لو كورس عادي → لازم حجز مؤكد للصف الحالي (نطاق شهري)
 -- ============================================================
 create or replace function public.can_access_lesson(p_lesson_id uuid)
 returns boolean
@@ -102,7 +107,6 @@ begin
     return false;
   end if;
 
-  -- جلب الدرس + القسم + الكورس
   select l.id, l.section_id, l.is_free, cs.course_id
   into v_lesson_id, v_section_id, v_lesson_is_free, v_course_id
   from public.lessons l
@@ -113,12 +117,10 @@ begin
     return false;
   end if;
 
-  -- درس مجاني → مفتوح للجميع
   if v_lesson_is_free then
     return true;
   end if;
 
-  -- جلب بيانات الكورس
   select grade, to_char(created_at, 'YYYY-MM')
   into v_course_grade, v_course_month
   from public.courses
@@ -128,7 +130,6 @@ begin
     return false;
   end if;
 
-  -- كورس احترافي: لازم حجز مؤكد على نفس الكورس
   if v_course_grade = 'professional' then
     return exists (
       select 1 from public.bookings b
@@ -138,7 +139,6 @@ begin
     );
   end if;
 
-  -- كورس عادي: النطاق الشهري
   if v_course_month is null then
     return false;
   end if;
@@ -157,7 +157,6 @@ grant execute on function public.can_access_lesson(uuid) to authenticated;
 
 -- ============================================================
 -- 4) دالة: جلب أقسام الكورس مع الدروس (للطالب)
---    ترجع accessible لكل درس
 -- ============================================================
 create or replace function public.get_course_sections_with_lessons(p_course_id uuid)
 returns table (
@@ -182,7 +181,6 @@ begin
     raise exception 'يجب تسجيل الدخول';
   end if;
 
-  -- التحقق إن الكورس للصف الحالي أو احترافي
   if not exists (
     select 1 from public.courses c
     where c.id = p_course_id
@@ -215,8 +213,7 @@ $$;
 grant execute on function public.get_course_sections_with_lessons(uuid) to authenticated;
 
 -- ============================================================
--- 5) تحديث can_access_course لتستخدم نفس منطق الدروس
---    (الكورس متاح لو فيه على الأقل درس مفتوح)
+-- 5) تحديث can_access_course
 -- ============================================================
 create or replace function public.can_access_course(p_course_id uuid)
 returns boolean
@@ -229,7 +226,6 @@ begin
     return false;
   end if;
 
-  -- لو فيه درس واحد مفتوح على الأقل → الكورس متاح
   select exists (
     select 1 from public.lessons l
     join public.course_sections cs on cs.id = l.section_id
@@ -243,7 +239,7 @@ $$;
 grant execute on function public.can_access_course(uuid) to authenticated;
 
 -- ============================================================
--- 6) تحديث get_student_courses لتستخدم المنطق الجديد
+-- 6) تحديث get_student_courses
 -- ============================================================
 create or replace function public.get_student_courses(p_grade text)
 returns table (
