@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import * as nodemailer from "https://esm.sh/nodemailer@6.9";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,7 +21,6 @@ serve(async (req) => {
   }
 
   try {
-    // استخراج البيانات من الطلب
     const { bookingData, studentData } = await req.json();
 
     if (!bookingData || !studentData) {
@@ -30,7 +30,6 @@ serve(async (req) => {
       });
     }
 
-    // جلب إيميل المستر من admin_settings
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -49,7 +48,39 @@ serve(async (req) => {
       );
     }
 
-    // تجهيز محتوى الإيميل
+    // Gmail SMTP Config
+    const gmailUser = Deno.env.get("GMAIL_USER");
+    const gmailAppPass = Deno.env.get("GMAIL_APP_PASSWORD");
+
+    if (!gmailUser || !gmailAppPass) {
+      return new Response(
+        JSON.stringify({ error: "Gmail credentials not configured in Secrets" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true, // true for 465, false for 587
+      auth: {
+        user: gmailUser,
+        pass: gmailAppPass,
+      },
+    });
+
+    // Verify connection
+    try {
+      await transporter.verify();
+    } catch (verifyErr) {
+      console.error("Gmail SMTP verify failed:", verifyErr);
+      return new Response(JSON.stringify({ error: "Gmail SMTP authentication failed" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Email content
     const monthNames = [
       "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
       "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"
@@ -79,7 +110,6 @@ serve(async (req) => {
           .label { font-weight: 600; color: #666; font-size: 14px; }
           .value { font-size: 16px; color: #333; }
           .footer { text-align: center; margin-top: 20px; color: #999; font-size: 12px; }
-          .btn { display: inline-block; background: #f5b741; color: #0b1020; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 20px; }
         </style>
       </head>
       <body>
@@ -127,40 +157,17 @@ serve(async (req) => {
       </html>
     `;
 
-    // إرسال الإيميل عبر Resend (أو أي خدمة SMTP)
-    // ملاحظة: محتاج تضيف RESEND_API_KEY في Supabase Edge Function Secrets
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    if (resendApiKey) {
-      const res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${resendApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: "Vision Academy <onboarding@resend.dev>",
-          to: [adminEmail],
-          subject,
-          html,
-        }),
-      });
+    // Send email
+    const info = await transporter.sendMail({
+      from: `"Vision Academy" <${gmailUser}>`,
+      to: adminEmail,
+      subject,
+      html,
+    });
 
-      if (!res.ok) {
-        const err = await res.text();
-        console.error("Resend error:", err);
-        return new Response(JSON.stringify({ error: "Failed to send email via Resend" }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    } else {
-      // Fallback: لو مفيش Resend، نطبع في اللوجز (للاختبار)
-      console.log("Email would be sent to:", adminEmail);
-      console.log("Subject:", subject);
-      console.log("HTML:", html);
-    }
+    console.log("Email sent:", info.messageId);
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, messageId: info.messageId }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
