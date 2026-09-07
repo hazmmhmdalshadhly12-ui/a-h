@@ -337,14 +337,14 @@ export default function CourseManager() {
         ))}
       </div>
 
-      const renderOptionsHint = (q) => {
+const renderOptionsHint = (q) => {
     if (q.type === 'true_false') {
-      return <span className="text-xs text-muted">الإجابة الصحيحة: {q.correct_answer === 'true' ? 'صح ✓' : q.correct_answer === 'false' ? 'غلط ✗' : q.correct_answer || '—'}</span>;
+      return <span className="text-xs text-muted">الاجابة الصحيحة: {q.correct_answer === 'true' ? 'صح' : q.correct_answer === 'false' ? 'غلط' : q.correct_answer || '-'}</span>;
     }
     const opts = Array.isArray(q.options) ? q.options : [];
     return (
       <span className="text-xs text-muted">
-        الاختيارات: {opts.join(' • ') || '—'} — الصحيح: {q.correct_answer || '—'}
+        الاختيارات: {opts.join(' | ') || '-'} - الصحيح: {q.correct_answer || '-'}
       </span>
     );
   };
