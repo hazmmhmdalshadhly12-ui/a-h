@@ -10,24 +10,25 @@ import Badge from '../../../components/ui/Badge.jsx';
 import Icon from '../../../components/ui/Icon.jsx';
 import Skeleton from '../../../components/ui/Skeleton.jsx';
 import { useToast } from '../../../components/ui/Toast.jsx';
-import { fetchCoursesAdmin, fetchCourseSectionsAdmin, addCourseSection, updateCourseSection, deleteCourseSection, addCourseLesson, updateCourseLesson, deleteCourseLesson } from '../../../services/courseService.js';
+import { fetchCourseLessonsAdmin, addCourseLesson, updateCourseLesson, deleteCourseLesson, reorderLessons } from '../../../services/courseService.js';
+import { supabase } from '../../../lib/supabaseClient.js';
 import { GRADES } from '../../../config/site.js';
 import { getFriendlyError } from '../../../utils/errors.js';
-import { supabase } from '../../../lib/supabaseClient.js';
 
-const QUESTION_TYPES = [
-  { value: 'mcq', label: 'اختيار من متعدد' },
-  { value: 'true_false', label: 'صح / غلط' },
-  { value: 'short_answer', label: 'سؤال مقالي قصير' }
+const VIDEO_PROVIDERS = [
+  { value: 'youtube', label: 'YouTube' },
+  { value: 'direct', label: 'رابط مباشر (MP4/M3U8)' },
+  { value: 'vimeo', label: 'Vimeo' }
 ];
 
-const EMPTY_QUESTION = {
-  question_text: '',
-  type: 'mcq',
-  options: [],
-  correct_answer: '',
-  points: 1,
-  order_index: 0
+const EMPTY_LESSON = {
+  title: '',
+  description: '',
+  video_url: '',
+  video_provider: 'youtube',
+  duration_minutes: 0,
+  order_index: 0,
+  is_free: false
 };
 
 export default function CourseManager() {
@@ -36,22 +37,24 @@ export default function CourseManager() {
   const toast = useToast();
 
   const [course, setCourse] = useState(null);
-  const [sections, setSections] = useState([]);
-  const [activeSectionId, setActiveSectionId] = useState(null);
-  const [questions, setQuestions] = useState([]);
+  const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [sectionSubmitting, setSectionSubmitting] = useState(false);
-  const [questionSubmitting, setQuestionSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const [sectionForm, setSectionForm] = useState({ title: '', order_index: 1 });
-  const [editingSection, setEditingSection] = useState(null);
-
-  const [questionForm, setQuestionForm] = useState(EMPTY_QUESTION);
-  const [editingQuestion, setEditingQuestion] = useState(null);
+  const [lessonForm, setLessonForm] = useState({
+    title: '',
+    description: '',
+    video_url: '',
+    video_provider: 'youtube',
+    duration_minutes: 0,
+    order_index: 0,
+    is_free: false
+  });
+  const [editingLessonId, setEditingLessonId] = useState(null);
 
   useEffect(() => {
     loadCourse();
-    loadSections();
+    loadLessons();
   }, [courseId]);
 
   const loadCourse = async () => {
@@ -59,130 +62,75 @@ export default function CourseManager() {
     if (data) setCourse(data);
   };
 
-  const loadSections = async () => {
-    const { data } = await fetchCourseSectionsAdmin(courseId);
-    if (data) {
-      data.forEach(s => s.questions?.sort((a, b) => a.order_index - b.order_index));
-      setSections(data);
-    }
+  const loadLessons = async () => {
+    const { data } = await supabase
+      .from('lessons')
+      .select('*')
+      .eq('course_id', courseId)
+      .order('order_index', { ascending: true });
+    setLessons(data || []);
     setLoading(false);
   };
 
-  const submitSection = async (e) => {
+  const submitLesson = async (e) => {
     e.preventDefault();
-    if (!sectionForm.title.trim()) return toast.error('اكتب عنوان القسم');
-    setSectionSubmitting(true);
-    const { error } = editingSection
-      ? await updateCourseSection(editingSection.section_id, sectionForm.title, sectionForm.order_index)
-      : await addCourseSection(courseId, sectionForm.title, sectionForm.order_index);
-    setSectionSubmitting(false);
-    if (error) return toast.error(getFriendlyError(error, 'فشل الحفظ'));
-    toast.success(editingSection ? 'تم تحديث القسم' : 'تمت إضافة القسم');
-    setEditingSection(null);
-    setSectionForm({ title: '', order_index: 1 });
-    loadSections();
-  };
+    if (!lessonForm.title.trim()) return toast.error('عنوان الدرس مطلوب');
 
-  const startEditSection = (s) => {
-    setEditingSection(s);
-    setSectionForm({ title: s.section_title || '', order_index: s.section_order || 1 });
-  };
-
-  const removeSection = async (sectionId) => {
-    if (!window.confirm('حذف هذا القسم وكل دروسه؟')) return;
-    const { error } = await deleteCourseSection(sectionId);
-    if (error) return toast.error(getFriendlyError(error, 'فشل الحذف'));
-    toast.success('تم حذف القسم');
-    loadSections();
-  };
-
-  // ==================== الأسئلة ====================
-
-  const renderOptionsHint = (q) => {
-    if (q.type === 'true_false') {
-      return <span className="text-xs text-muted">الاجابة الصحيحة: {q.correct_answer === 'true' ? 'صح' : q.correct_answer === 'false' ? 'غلط' : q.correct_answer || '-'}</span>;
+    setSubmitting(true);
+    let error;
+    if (editingLessonId) {
+      ({ error } = await updateCourseLesson(editingLessonId, lessonForm));
+    } else {
+      ({ error } = await addCourseLesson(courseId, lessonForm));
     }
-    const opts = Array.isArray(q.options) ? q.options : [];
-    return (
-      <span className="text-xs text-muted">
-        الاختيارات: {opts.join(' | ') || '-'} - الصحيح: {q.correct_answer || '-'}
-      </span>
-    );
+    setSubmitting(false);
+    if (error) return toast.error(error.message || 'فشل الحفظ');
+    toast.success(editingLessonId ? 'تم تحديث الدرس' : 'تمت إضافة الدرس');
+    resetLessonForm();
+    loadLessons();
   };
 
-  // ==================== الأسئلة ====================
-  const loadQuestions = async (sectionId) => {
-    setActiveSectionId(sectionId);
-    const { data } = await supabase
-      .from('course_questions')
-      .select('*')
-      .eq('section_id', sectionId)
-      .order('order_index', { ascending: true });
-    setQuestions(data || []);
+  const editLesson = (lesson) => {
+    setEditingLessonId(lesson.id);
+    setLessonForm({
+      title: lesson.title,
+      description: lesson.description || '',
+      video_url: lesson.video_url || '',
+      video_provider: lesson.video_provider || 'youtube',
+      duration_minutes: lesson.duration_minutes || 0,
+      order_index: lesson.order_index,
+      is_free: lesson.is_free
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const submitQuestion = async (e) => {
-    e.preventDefault();
-    if (!questionForm.question_text.trim()) return toast.error('اكتب نص السؤال');
-    if (questionForm.type === 'mcq' && (!questionForm.options || questionForm.options.filter(Boolean).length < 2)) {
-      return toast.error('السؤال الاختياري محتاج على الأقل خيارين');
-    }
-    if (!questionForm.correct_answer) return toast.error('اختار الإجابة الصحيحة');
-
-    setQuestionSubmitting(true);
-    const payload = { ...questionForm, section_id: activeSectionId };
-    const { error } = editingQuestion
-      ? await supabase.from('course_questions').update(payload).eq('id', editingQuestion)
-      : await supabase.from('course_questions').insert(payload);
-    setQuestionSubmitting(false);
-    if (error) return toast.error(getFriendlyError(error, 'فشل الحفظ'));
-    toast.success(editingQuestion ? 'تم تحديث السؤال' : 'تمت إضافة السؤال');
-    resetQuestionForm();
-    loadQuestions(activeSectionId);
+  const deleteLesson = async (id) => {
+    if (!window.confirm('متأكد تحذف الدرس؟')) return;
+    const { error } = await deleteCourseLesson(id);
+    if (error) return toast.error(error.message || 'فشل الحذف');
+    toast.success('تم حذف الدرس');
+    loadLessons();
   };
 
-  const startEditQuestion = (q) => {
-    setEditingQuestion(q.id);
-    setQuestionForm({
-      question_text: q.question_text || '',
-      type: q.type,
-      options: q.options || [],
-      correct_answer: q.correct_answer || '',
-      points: q.points || 1,
-      order_index: q.order_index || 0
+  const resetLessonForm = () => {
+    setEditingLessonId(null);
+    setLessonForm({
+      title: '',
+      description: '',
+      video_url: '',
+      video_provider: 'youtube',
+      duration_minutes: 0,
+      order_index: lessons.length + 1,
+      is_free: false
     });
   };
 
-  const removeQuestion = async (id) => {
-    if (!window.confirm('متأكد تحذف السؤال؟')) return;
-    const { error } = await supabase.from('course_questions').delete().eq('id', id);
-    if (error) return toast.error(getFriendlyError(error, 'فشل الحذف'));
-    toast.success('تم حذف السؤال');
-    loadQuestions(activeSectionId);
-  };
-
-  const resetQuestionForm = () => {
-    setEditingQuestion(null);
-    setQuestionForm(EMPTY_QUESTION);
-  };
-
-  const handleOptionChange = (index, value) => {
-    const opts = [...questionForm.options];
-    opts[index] = value;
-    setQuestionForm({ ...questionForm, options: opts });
-  };
-
-  const addOption = () => {
-    setQuestionForm({ ...questionForm, options: [...questionForm.options, ''] });
-  };
-
-  const removeOption = (index) => {
-    const opts = questionForm.options.filter((_, i) => i !== index);
-    setQuestionForm({ ...questionForm, options: opts });
-  };
-
-  const setCorrectAnswer = (answer) => {
-    setQuestionForm({ ...questionForm, correct_answer: answer });
+  const handleReorder = (fromIndex, toIndex) => {
+    const newLessons = [...lessons];
+    const [moved] = newLessons.splice(fromIndex, 1);
+    newLessons.splice(toIndex, 0, moved);
+    const lessonOrders = newLessons.map((l, i) => ({ id: l.id, order_index: i }));
+    reorderLessons(lessonOrders).then(() => loadLessons());
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><Skeleton className="h-8 w-64" /></div>;
@@ -191,121 +139,263 @@ export default function CourseManager() {
     <div className="space-y-6">
       <AdminHeader
         title={course?.title || 'إدارة الكورس'}
-        subtitle="إدارة الأقسام والأسئلة — الأسئلة بتتعرض للطلاب في الامتحانات"
+        subtitle="إدارة الدروس — المستر يضيف/يعدل/يرتب الدروس، والطالب يشوفها في الشريط الجانبي"
         actions={<Button variant="secondary" onClick={() => navigate(-1)}>رجوع للكورسات</Button>}
       />
 
-      {/* نموذج إضافة/تعديل قسم */}
+      {/* نموذج إضافة/تعديل درس */}
       <Card className="space-y-4">
-        <h2 className="font-display text-lg font-bold">{editingSection ? 'تعديل القسم' : 'إضافة قسم جديد'}</h2>
-        <form onSubmit={submitSection} className="grid gap-4 sm:grid-cols-2">
-          <Input name="title" label="عنوان القسم *" value={sectionForm.title} onChange={e => setSectionForm({...sectionForm, title: e.target.value})} required />
-          <Input name="order_index" label="الترتيب *" type="number" value={sectionForm.order_index} onChange={e => setSectionForm({...sectionForm, order_index: e.target.value})} required />
-          <div className="sm:col-span-2 flex gap-2">
-            <Button type="submit" loading={sectionSubmitting}>{editingSection ? 'حفظ التعديل' : 'إضافة القسم'}</Button>
-            {editingSection && <Button type="button" variant="ghost" onClick={() => { setEditingSection(null); setSectionForm({ title: '', order_index: 1 }); }}>إلغاء</Button>}
+        <h2 className="font-display text-lg font-bold">{editingLessonId ? 'تعديل الدرس' : 'إضافة درس جديد'}</h2>
+        <form onSubmit={submitLesson} className="space-y-4">
+          <Input name="title" label="عنوان الدرس *" value={lessonForm.title} onChange={e => setLessonForm({...lessonForm, title: e.target.value})} required />
+          <Input name="order_index" label="الترتيب *" type="number" value={lessonForm.order_index} onChange={e => setLessonForm({...lessonForm, order_index: e.target.value})} required />
+          <Select name="video_provider" label="مصدر الفيديو" value={lessonForm.video_provider} onChange={e => setLessonForm({...lessonForm, video_provider: e.target.value})} options={VIDEO_PROVIDERS} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input name="duration_minutes" label="المدة (دقيقة)" type="number" value={lessonForm.duration_minutes} onChange={e => setLessonForm({...lessonForm, duration_minutes: e.target.value})} />
+            <Input name="video_url" label="رابط الفيديو" placeholder="https://youtube.com/watch?v=... أو رابط مباشر" value={lessonForm.video_url} onChange={e => setLessonForm({...lessonForm, video_url: e.target.value})} />
+          </div>
+          <Textarea name="description" label="وصف الدرس" rows={3} placeholder="شرح مختصر للدرس..." value={lessonForm.description} onChange={e => setLessonForm({...lessonForm, description: e.target.value})} />
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={lessonForm.is_free} onChange={e => setLessonForm({...lessonForm, is_free: e.target.checked})} className="h-4 w-4 accent-signal" />
+            <span className="font-medium text-paper">درس مجاني (مفتوح للجميع)</span>
+          </label>
+          <div className="flex gap-2">
+            <Button type="submit" loading={submitting}>{editingLessonId ? 'حفظ التعديل' : 'إضافة الدرس'}</Button>
+            {editingLessonId && <Button type="button" variant="ghost" onClick={resetLessonForm}>إلغاء</Button>}
           </div>
         </form>
       </Card>
 
-      {/* قائمة الأقسام */}
-      <div className="space-y-4">
-        {sections.length === 0 ? (
-          <Card className="text-center py-8 text-muted">لا توجد أقسام — أضف أول قسم من فوق.</Card>
-        ) : sections.map((section) => (
-          <Card key={section.section_id} className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="font-display text-lg font-bold">{section.section_title}</h3>
-                <p className="text-sm text-muted">ترتيب: {section.section_order} • {section.questions?.length || 0} أسئلة</p>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => loadQuestions(section.section_id)}>
-                  <span>الأسئلة</span>
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => startEditSection(section)}>تعديل</Button>
-                <Button variant="ghost" size="sm" className="text-danger" onClick={() => removeSection(section.section_id)}>حذف</Button>
-              </div>
-            </div>
-
-            {activeSectionId === section.section_id && (
-              <div className="space-y-4 border-t border-ink-700/60 pt-4">
-                <h4 className="font-display font-bold">أسئلة القسم</h4>
-
-                {/* نموذج إضافة/تعديل سؤال */}
-                <Card className="space-y-4 p-4 border-signal/30 bg-signal/5">
-                  <h5 className="font-display font-bold">{editingQuestion ? 'تعديل السؤال' : 'إضافة سؤال جديد'}</h5>
-                  <form onSubmit={submitQuestion} className="space-y-4">
-                    <Input name="question_text" label="نص السؤال *" value={questionForm.question_text} onChange={e => setQuestionForm({...questionForm, question_text: e.target.value})} required />
-                    <Select name="type" label="نوع السؤال" value={questionForm.type} onChange={e => setQuestionForm({...questionForm, type: e.target.value})} options={QUESTION_TYPES} />
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Input name="points" label="النقاط" type="number" value={questionForm.points} onChange={e => setQuestionForm({...questionForm, points: e.target.value})} />
-                      <Input name="order_index" label="الترتيب" type="number" value={questionForm.order_index} onChange={e => setQuestionForm({...questionForm, order_index: e.target.value})} />
+      {/* قائمة الدروس مع سحب للترتيب */}
+      <div className="space-y-3">
+        {lessons.length === 0 ? (
+          <Card className="text-center py-8 text-muted">لا توجد دروس — أضف أول درس من فوق.</Card>
+        ) : (
+          <div className="space-y-2" role="list" aria-label="قائمة الدروس">
+            {lessons.map((lesson, index) => (
+              <Card key={lesson.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 relative" role="listitem">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <button
+                    onMouseDown={() => false}
+                    onClick={() => false}
+                    className="cursor-grab active:cursor-grabbing text-muted hover:text-signal flex h-10 w-10 items-center justify-center rounded-lens bg-ink-800 transition"
+                    aria-label="سحب للترتيب"
+                  >
+                    <Icon name="grip" className="h-5 w-5" />
+                  </button>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-muted">#{String(lesson.order_index).padStart(2, '0')}</span>
+                      <span className="font-semibold text-paper truncate">{lesson.title}</span>
+                      {lesson.is_free && <Badge color="success">مجاني</Badge>}
+                      <Badge color={lesson.video_url ? 'stream' : 'muted'}>
+                        {lesson.video_provider || '—'}
+                      </Badge>
                     </div>
-
-                    {questionForm.type === 'mcq' && (
-                      <div className="space-y-2">
-                        <p className="font-medium text-sm text-paper">الخيارات (على الأقل 2):</p>
-                        <div className="space-y-2">
-                          {questionForm.options.map((opt, i) => (
-                            <div key={i} className="flex gap-2">
-                              <Input
-                                name={`option_${i}`}
-                                placeholder={`الخيار ${i + 1}`}
-                                value={opt}
-                                onChange={(e) => handleOptionChange(i, e.target.value)}
-                              />
-                              <button type="button" onClick={() => removeOption(i)} className="focus-ring flex h-10 items-center px-3 text-danger hover:bg-danger/10" aria-label="حذف الخيار">
-                                ✕
-                              </button>
-                            </div>
-                          ))}
-                          <button type="button" onClick={addOption} className="focus-ring text-sm text-signal hover:text-signal-light">+ إضافة خيار</button>
-                        </div>
-                      </div>
-                    )}
-
-                    {questionForm.type === 'true_false' && (
-                      <div className="flex flex-wrap items-center gap-3">
-                        <p className="font-medium text-sm text-paper">الإجابة الصحيحة:</p>
-                        <button type="button" onClick={() => setCorrectAnswer('true')} className={`focus-ring rounded-lens px-4 py-2 text-sm font-bold ${questionForm.correct_answer === 'true' ? 'bg-signal text-ink' : 'border border-ink-600 bg-ink-800'}`}>صح</button>
-                        <button type="button" onClick={() => setCorrectAnswer('false')} className={`focus-ring rounded-lens px-4 py-2 text-sm font-bold ${questionForm.correct_answer === 'false' ? 'bg-signal text-ink' : 'border border-ink-600 bg-ink-800'}`}>غلط</button>
-                      </div>
-                    )}
-
-                    <div className="flex gap-2">
-                      <Button type="submit" loading={questionSubmitting}>{editingQuestion ? 'حفظ التعديل' : 'إضافة السؤال'}</Button>
-                      {editingQuestion && <Button type="button" variant="ghost" onClick={resetQuestionForm}>إلغاء</Button>}
-                    </div>
-                  </form>
-                </Card>
-
-                {/* قائمة الأسئلة */}
-                <div className="space-y-2">
-                  {questions.length === 0 ? (
-                    <p className="text-sm text-muted text-center py-4">لا توجد أسئلة — أضف أول سؤال من فوق.</p>
-                  ) : questions.map((q) => (
-                    <div key={q.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lens border border-ink-600 bg-ink-900/50 px-4 py-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <Badge color="muted">{q.order_index}</Badge>
-                          <Badge color={q.type === 'mcq' ? 'signal' : q.type === 'true_false' ? 'stream' : 'warning'}>{QUESTION_TYPES.find(t => t.value === q.type)?.label || q.type}</Badge>
-                          <span className="font-semibold text-paper truncate">{q.question_text}</span>
-                        </div>
-                        <div className="mt-1 text-xs text-muted">{renderOptionsHint(q)}</div>
-                      </div>
-                      <div className="flex shrink-0 gap-2">
-                        <Button variant="outline" size="sm" onClick={() => startEditQuestion(q)}>تعديل</Button>
-                        <Button variant="ghost" size="sm" className="text-danger" onClick={() => removeQuestion(q.id)}>حذف</Button>
-                      </div>
-                    </div>
-                  ))}
+                    {lesson.description && <p className="mt-1 text-xs text-muted truncate">{lesson.description}</p>}
+                  </div>
                 </div>
-              </div>
-            )}
-          </Card>
-        ))}
+                <div className="flex shrink-0 gap-2">
+                  <Button variant="outline" size="sm" onClick={() => editLesson(lesson)}>
+                    <Icon name="edit" className="h-4 w-4" /> تعديل
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-danger" onClick={() => deleteLesson(lesson.id)}>
+                    <Icon name="trash" className="h-4 w-4" />
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
+function CourseManager() {
+  const { courseId } = useParams();
+  const navigate = useNavigate();
+  const toast = useToast();
+
+  const [course, setCourse] = useState(null);
+  const [lessons, setLessons] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [lessonForm, setLessonForm] = useState({
+    title: '',
+    description: '',
+    video_url: '',
+    video_provider: 'youtube',
+    duration_minutes: 0,
+    order_index: 0,
+    is_free: false
+  });
+  const [editingLessonId, setEditingLessonId] = useState(null);
+
+  useEffect(() => {
+    loadCourse();
+    loadLessons();
+  }, [courseId]);
+
+  const loadCourse = async () => {
+    const { data } = await supabase.from('courses').select('*').eq('id', courseId).maybeSingle();
+    if (data) setCourse(data);
+  };
+
+  const loadLessons = async () => {
+    const { data } = await supabase
+      .from('lessons')
+      .select('*')
+      .eq('course_id', courseId)
+      .order('order_index', { ascending: true });
+    setLessons(data || []);
+    setLoading(false);
+  };
+
+  const VIDEO_PROVIDERS = [
+    { value: 'youtube', label: 'YouTube' },
+    { value: 'direct', label: 'رابط مباشر (MP4/M3U8)' },
+    { value: 'vimeo', label: 'Vimeo' }
+  ];
+
+  const submitLesson = async (e) => {
+    e.preventDefault();
+    if (!lessonForm.title.trim()) return toast.error('عنوان الدرس مطلوب');
+
+    setSubmitting(true);
+    let error;
+    if (editingLessonId) {
+      ({ error } = await supabase.from('lessons').update({
+        title: lessonForm.title,
+        description: lessonForm.description,
+        video_url: lessonForm.video_url,
+        video_provider: lessonForm.video_provider,
+        duration_minutes: lessonForm.duration_minutes,
+        order_index: lessonForm.order_index,
+        is_free: lessonForm.is_free
+      }).eq('id', editingLessonId));
+    } else {
+      ({ error } = await supabase.from('lessons').insert({
+        course_id: courseId,
+        ...lessonForm
+      }));
+    }
+    setSubmitting(false);
+    if (error) return toast.error(error.message || 'فشل الحفظ');
+    toast.success(editingLessonId ? 'تم تحديث الدرس' : 'تمت إضافة الدرس');
+    resetLessonForm();
+    loadLessons();
+  };
+
+  const editLesson = (lesson) => {
+    setEditingLessonId(lesson.id);
+    setLessonForm({
+      title: lesson.title,
+      description: lesson.description || '',
+      video_url: lesson.video_url || '',
+      video_provider: lesson.video_provider || 'youtube',
+      duration_minutes: lesson.duration_minutes || 0,
+      order_index: lesson.order_index,
+      is_free: lesson.is_free
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const deleteLesson = async (id) => {
+    if (!window.confirm('متأكد تحذف الدرس؟')) return;
+    const { error } = await supabase.from('lessons').delete().eq('id', id);
+    if (error) return toast.error(error.message || 'فشل الحذف');
+    toast.success('تم حذف الدرس');
+    loadLessons();
+  };
+
+  const resetLessonForm = () => {
+    setEditingLessonId(null);
+    setLessonForm({
+      title: '',
+      description: '',
+      video_url: '',
+      video_provider: 'youtube',
+      duration_minutes: 0,
+      order_index: lessons.length + 1,
+      is_free: false
+    });
+  };
+
+  if (loading) return <div className="flex items-center justify-center h-64"><Skeleton className="h-8 w-64" /></div>;
+
+  return (
+    <div className="space-y-6">
+      <AdminHeader
+        title={course?.title || 'إدارة الكورس'}
+        subtitle="إدارة الدروس — المستر يضيف/يعدل/يرتب الدروس، والطالب يشوفها في الشريط الجانبي"
+        actions={<Button variant="secondary" onClick={() => navigate(-1)}>رجوع للكورسات</Button>}
+      />
+
+      {/* نموذج إضافة/تعديل درس */}
+      <Card className="space-y-4">
+        <h2 className="font-display text-lg font-bold">{editingLessonId ? 'تعديل الدرس' : 'إضافة درس جديد'}</h2>
+        <form onSubmit={submitLesson} className="space-y-4">
+          <Input name="title" label="عنوان الدرس *" value={lessonForm.title} onChange={e => setLessonForm({...lessonForm, title: e.target.value})} required />
+          <Input name="order_index" label="الترتيب *" type="number" value={lessonForm.order_index} onChange={e => setLessonForm({...lessonForm, order_index: e.target.value})} required />
+          <Select name="video_provider" label="مصدر الفيديو" value={lessonForm.video_provider} onChange={e => setLessonForm({...lessonForm, video_provider: e.target.value})} options={[
+    { value: 'youtube', label: 'YouTube' },
+    { value: 'direct', label: 'رابط مباشر (MP4/M3U8)' },
+    { value: 'vimeo', label: 'Vimeo' }
+  ]} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input name="duration_minutes" label="المدة (دقيقة)" type="number" value={lessonForm.duration_minutes} onChange={e => setLessonForm({...lessonForm, duration_minutes: e.target.value})} />
+            <Input name="video_url" label="رابط الفيديو" placeholder="https://youtube.com/watch?v=... أو رابط مباشر" value={lessonForm.video_url} onChange={e => setLessonForm({...lessonForm, video_url: e.target.value})} />
+          </div>
+          <Textarea name="description" label="وصف الدرس" rows={3} placeholder="شرح مختصر للدرس..." value={lessonForm.description} onChange={e => setLessonForm({...lessonForm, description: e.target.value})} />
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={lessonForm.is_free} onChange={e => setLessonForm({...lessonForm, is_free: e.target.checked})} className="h-4 w-4 accent-signal" />
+            <span className="font-medium text-paper">درس مجاني (مفتوح للجميع)</span>
+          </label>
+          <div className="flex gap-2">
+            <Button type="submit" loading={submitting}>{editingLessonId ? 'حفظ التعديل' : 'إضافة الدرس'}</Button>
+            {editingLessonId && <Button type="button" variant="ghost" onClick={resetLessonForm}>إلغاء</Button>}
+          </div>
+        </form>
+      </Card>
+
+      {/* قائمة الدروس */}
+      <div className="space-y-3">
+        {lessons.length === 0 ? (
+          <Card className="text-center py-8 text-muted">لا توجد دروس — أضف أول درس من فوق.</Card>
+        ) : (
+          <div className="space-y-2">
+            {lessons.map((lesson) => (
+              <Card key={lesson.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-muted">#{String(lesson.order_index).padStart(2, '0')}</span>
+                      <span className="font-semibold text-paper truncate">{lesson.title}</span>
+                      {lesson.is_free && <Badge color="success">مجاني</Badge>}
+                      <Badge color={lesson.video_url ? 'stream' : 'muted'}>
+                        {lesson.video_provider || '—'}
+                      </Badge>
+                    </div>
+                    {lesson.description && <p className="mt-1 text-xs text-muted truncate">{lesson.description}</p>}
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <Button variant="outline" size="sm" onClick={() => editLesson(lesson)}>
+                    <Icon name="edit" className="h-4 w-4" /> تعديل
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-danger" onClick={() => deleteLesson(lesson.id)}>
+                    <Icon name="trash" className="h-4 w-4" />
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default CourseManager;
