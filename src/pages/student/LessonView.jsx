@@ -1,4 +1,3 @@
-
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth.js';
@@ -225,6 +224,7 @@ export default function LessonView() {
               {!showSubscribe && <Button className="mt-2" onClick={() => setShowSubscribe(true)}><Icon name="lock" className="h-4 w-4" /> اشترك</Button>}
             </div>
           </div>
+
           {showSubscribe && (
             <div className="space-y-4 rounded-lens border border-signal/40 bg-signal/10 p-4">
               <h3 className="font-display text-base font-black text-paper">خطوات الاشتراك 💳</h3>
@@ -437,6 +437,3 @@ export default function LessonView() {
     </div>
   );
 }
-</parameter>
-</function>
-</tool_call>
