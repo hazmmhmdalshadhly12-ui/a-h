@@ -190,6 +190,14 @@ export default function LessonView() {
   const isLessonAccessible = activeLesson.accessible === true || activeLesson.is_free === true;
   const videoUrl = toEmbedUrl(activeLesson.video_url || course.video_url);
 
+  function toEmbedUrl(url) {
+    if (!url) return '';
+    if (url.includes('/embed/')) return url;
+    const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+    if (match) return `https://www.youtube.com/embed/${match[1]}`;
+    return url;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
