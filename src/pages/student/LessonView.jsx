@@ -383,7 +383,7 @@ export default function LessonView() {
               <section className="space-y-4">
                 <div className="flex items-center gap-2"><Icon name="chat" className="h-5 w-5 text-signal" /><h2 className="font-display text-lg font-bold">تعليقات ({comments.length})</h2></div>
                 <Card className="space-y-4">
-                  <form onSubmit={submitComment} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <form onSubmit={submitComment} className="flex flex-col gap-2 sm:flex_row sm:items-end">
                     <textarea name="comment" label="اكتب تعليق أو سؤال للمستر" rows={2} placeholder="اسأل أو شارك معلومة..." value={commentBody} onChange={e => setCommentBody(e.target.value)} className="input-base min-h-[80px] resize-y" />
                     <Button type="submit" loading={commentSubmitting}><Icon name="send" className="h-4 w-4" /> إرسال</Button>
                   </form>
@@ -395,7 +395,7 @@ export default function LessonView() {
                         const mine = c.student_id === profile?.id;
                         return (
                           <li key={c.comment_id} className="rounded-lens bg-ink-800/60 p-3">
-                            <div className="flex items-center justify-between gap-2">
+                            <div className="flex items_center justify-between gap-2">
                               <p className="flex items-center gap-2 text-xs text-muted"><span className="font-semibold text-paper">{c.student_name || 'طالب'}</span> {c.is_pinned && <Badge color="warning">📌 مثبّت</Badge>} <span>{formatDateTime(c.created_at)}</span></p>
                               {mine && <button type="button" onClick={() => removeMyComment(c.comment_id)} className="focus-ring text-muted hover:text-danger" aria-label="حذف تعليقك"><Icon name="trash" className="h-4 w-4" /></button>}
                             </div>
@@ -410,15 +410,15 @@ export default function LessonView() {
 
               {/* ===== الواجبات ===== */}
               <section className="space-y-4">
-                <div className="flex items-center gap-2"><Icon name="edit" className="h-5 w-5 text-signal" /><h2 className="font-display text-lg font-bold">واجبات الكورس ({homeworks.length})</h2></div>
+                <div className="flex items_center gap-2"><Icon name="edit" className="h-5 w-5 text-signal" /><h2 className="font-display text-lg font-bold">واجبات الكورس ({homeworks.length})</h2></div>
                 {extraLoading ? <Skeleton className="h-24" /> : homeworks.length === 0 ? (
                   <Card className="text-sm text-muted">لا توجد واجبات في هذا الكورس حالياً.</Card>
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {homeworks.map(h => (
                       <Card key={h.homework_id} className="flex flex-col gap-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lens bg-signal/15 text-signal"><Icon name="edit" className="h-5 w-5" /></div>
+                        <div className="flex items_center justify-between gap-2">
+                          <div className="flex h-10 w-10 items_center justify_center rounded-lens bg-signal/15 text-signal"><Icon name="edit" className="h-5 w-5" /></div>
                           {h.submitted ? <Badge color="success">تم التسليم — {h.score}/{h.total_points}</Badge> : <Badge color="warning">لم يُسلّم</Badge>}
                         </div>
                         <div><h3 className="font-display font-bold text-paper">{h.title}</h3>{h.description && <p className="mt-1 text-sm text-muted line-clamp-2">{h.description}</p>}</div>
