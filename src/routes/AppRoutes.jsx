@@ -28,6 +28,7 @@ import StudentMaterials from '../pages/student/Materials.jsx';
 import CodePlayground from '../pages/student/CodePlayground.jsx';
 import Profile from '../pages/student/Profile.jsx';
 import StudentChat from '../pages/student/Chat.jsx';
+import LessonView from '../pages/student/LessonView.jsx';
 
 import ParentLayout from '../pages/parent/ParentLayout.jsx';
 import ParentDashboard from '../pages/parent/Dashboard.jsx';
@@ -44,7 +45,6 @@ import AdminCourses from '../pages/admin/courses/Courses.jsx';
 import CreateCourse from '../pages/admin/courses/CreateCourse.jsx';
 import EditCourse from '../pages/admin/courses/EditCourse.jsx';
 import CourseManager from '../pages/admin/courses/CourseManager.jsx';
-import CourseSections from '../pages/admin/courses/CourseSections.jsx';
 import AdminSections from '../pages/admin/sections/Sections.jsx';
 import AdminBookings from '../pages/admin/bookings/Bookings.jsx';
 import AdminCompetitions from '../pages/admin/competitions/Competitions.jsx';
@@ -87,6 +87,7 @@ export default function AppRoutes() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="courses" element={<MyCourses />} />
         <Route path="courses/:courseId" element={<CourseDetails />} />
+        <Route path="courses/:courseId/lesson/:lessonId" element={<LessonView />} />
         <Route path="courses/:courseId/homework/:homeworkId" element={<HomeworkTake />} />
         <Route path="exams" element={<Exams />} />
         <Route path="exams/:examId" element={<TakeExam />} />
@@ -136,7 +137,6 @@ export default function AppRoutes() {
         <Route path="courses/new" element={<CreateCourse />} />
         <Route path="courses/:courseId" element={<EditCourse />} />
         <Route path="courses/:courseId/manage" element={<CourseManager />} />
-        <Route path="courses/:courseId/sections" element={<CourseSections />} />
         <Route path="sections" element={<AdminSections />} />
         <Route path="materials" element={<AdminMaterials />} />
         <Route path="code-challenges" element={<CodeChallenges />} />
