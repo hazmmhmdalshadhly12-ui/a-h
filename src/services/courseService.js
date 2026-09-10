@@ -13,13 +13,11 @@ export async function fetchCourses({ grade } = {}) {
   });
 }
 
-/** كورسات الطالب كاملة — متاحة ومقفولة بصرياً (القفل حسب شهر الاشتراك المؤكد) */
 export async function fetchStudentCourses(grade) {
   if (!grade) return { data: [], error: null };
   return supabase.rpc('get_student_courses', { p_grade: grade });
 }
 
-/** للصفحات العامة بس — view من غير video_url (الفيديوهات للمسجلين فقط) */
 export async function fetchPublicCourses() {
   return safeQuery(MOCK_COURSES, () =>
     supabase.from('courses_public').select('*').order('order_index', { ascending: true })
@@ -36,8 +34,6 @@ export async function fetchCourseById(courseId) {
   );
 }
 
-// ===== عمليات الأدمن =====
-
 export async function createCourse(course) {
   return supabase.from('courses').insert(course).select().single();
 }
@@ -49,8 +45,6 @@ export async function updateCourse(courseId, updates) {
 export async function deleteCourse(courseId) {
   return supabase.from('courses').delete().eq('id', courseId);
 }
-
-// ===== دروس (أدمن) - مبسطة: كورس → دروس مباشرة =====
 
 export async function fetchCourseLessonsAdmin(courseId) {
   if (!courseId) return { data: [], error: null };
@@ -91,14 +85,16 @@ export async function deleteCourseLesson(lessonId) {
 }
 
 export async function reorderLessons(lessonOrders) {
-  // lessonOrders = [{ id, order_index }, ...]
   const updates = lessonOrders.map(({ id, order_index }) =>
     supabase.from('lessons').update({ order_index }).eq('id', id)
   );
   return Promise.all(updates);
 }
 
-// ===== للطلاب (عبر دوال آمنة) =====
+export async function fetchCourseSectionsWithLessons(courseId) {
+  if (!courseId) return { data: [], error: null };
+  return supabase.rpc('get_course_sections_with_lessons', { p_course_id: courseId });
+}
 
 export async function fetchCourseLessons(courseId) {
   if (!courseId) return { data: [], error: null };
@@ -120,8 +116,6 @@ export async function submitHomework(homeworkId, answers) {
   return supabase.rpc('submit_homework', { p_homework_id: homeworkId, p_answers: answers });
 }
 
-// ===== تعليقات الكورس =====
-
 export async function fetchCourseComments(courseId) {
   if (!courseId) return { data: [], error: null };
   return supabase.rpc('get_course_comments', { p_course_id: courseId });
@@ -141,8 +135,6 @@ export async function togglePinComment(commentId) {
   if (!commentId) return { data: null, error: { message: 'بيانات ناقصة' } };
   return supabase.rpc('toggle_pin_comment', { p_comment_id: commentId });
 }
-
-// ===== ملفات الكورس =====
 
 export async function fetchCourseFiles(courseId) {
   if (!courseId) return { data: [], error: null };
@@ -164,11 +156,8 @@ export async function deleteCourseFile(fileId) {
   return supabase.rpc('delete_course_file', { p_file_id: fileId });
 }
 
-// ===== رفع ملف للكورس (Supabase Storage) =====
-
 const FILES_BUCKET = 'course-files';
 
-/** الامتدادات الآمنة للرفع (بتحمي من ملفات SVG/HTML الخبيثة = XSS) */
 const ALLOWED_EXTENSIONS = [
   'pdf', 'png', 'jpg', 'jpeg', 'jfif', 'webp', 'gif',
   'mp4', 'm4v', 'mov', 'zip', 'rar', '7z',
@@ -176,7 +165,6 @@ const ALLOWED_EXTENSIONS = [
   'txt', 'csv', 'mp3', 'wav', 'ogg'
 ];
 
-/** يرفع ملف لـ Storage ويرجع الـ public URL */
 export async function uploadCourseFile(file, { courseId, studentId }) {
   if (!file || !courseId) return { data: null, error: { message: 'بيانات ناقصة' } };
   const ext = (file.name || '').split('.').pop()?.toLowerCase();
@@ -197,18 +185,15 @@ export async function uploadCourseFile(file, { courseId, studentId }) {
   return { data: { fileUrl: urlData?.publicUrl, fileType, fileName: safeName }, error: null };
 }
 
-/** رابط تحميل مباشر لملف كورس — بينزّل بدل فتح نافذة عرض PDF */
 export function courseFileDownloadUrl(file) {
   if (!file?.file_url) return '';
   const base = file.file_url;
-  // لو مش رابط سلة Supabase → ارجعه زي ما هو
   if (!base.includes('/storage/v1/object/public/')) return base;
   const name = file.title || base.split('/').pop() || 'file';
   const sep = base.includes('?') ? '&' : '?';
   return `${base}${sep}download=${encodeURIComponent(name)}`;
 }
 
-/** تحميل ملف كورس كملف مباشرة في نفس الصفحة — من غير فتح صفحة تانية */
 export async function downloadCourseFile(file) {
   if (!file?.file_url) return { data: null, error: { message: 'بيانات ناقصة' } };
   const marker = '/object/public/course-files/';
