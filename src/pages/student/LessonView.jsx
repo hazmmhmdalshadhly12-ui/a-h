@@ -1,3 +1,4 @@
+
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth.js';
@@ -8,14 +9,13 @@ import Badge from '../../components/ui/Badge.jsx';
 import Icon from '../../components/ui/Icon.jsx';
 import Skeleton from '../../components/ui/Skeleton.jsx';
 import { useToast } from '../../components/ui/Toast.jsx';
-import { fetchCourseLessons, fetchCourseHomeworks, fetchCourseFiles, fetchCourseComments, addCourseComment, deleteCourseComment, uploadCourseFile, addCourseFile, deleteCourseFile, courseFileDownloadUrl } from '../../services/courseService.js';
+import { fetchCourseHomeworks, fetchCourseFiles, fetchCourseComments, addCourseComment, deleteCourseComment, uploadCourseFile, addCourseFile, deleteCourseFile, courseFileDownloadUrl } from '../../services/courseService.js';
 import { createBooking } from '../../services/bookingService.js';
 import { GRADE_SHORT } from '../../config/site.js';
 import { PAYMENT_INFO } from '../../config/constants.js';
 import { getFriendlyError } from '../../utils/errors.js';
 import { cn } from '../../lib/utils.js';
 import { formatDateTime } from '../../utils/formatDate.js';
-import { supabase } from '../../lib/supabaseClient.js';
 
 function toEmbedUrl(url) {
   if (!url) return '';
@@ -100,14 +100,6 @@ export default function LessonView() {
   const isLessonAccessible = activeLesson?.accessible === true || activeLesson?.is_free === true;
   const videoUrl = toEmbedUrl(activeLesson?.video_url || course.video_url);
   const instagram = PAYMENT_INFO.instagramNumber;
-
-  function toEmbedUrl(url) {
-    if (!url) return '';
-    if (url.includes('/embed/')) return url;
-    const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
-    if (match) return `https://www.youtube.com/embed/${match[1]}`;
-    return url;
-  }
 
   // ===== التعليقات =====
   const submitComment = async (e) => {
@@ -260,14 +252,14 @@ export default function LessonView() {
                 <Icon name="layers" className="h-4 w-4 text-signal" />
                 <p className="font-display text-sm font-bold text-paper">دروس الكورس ({lessons.length})</p>
               </div>
-              <div className="max-h-[60vh] overflow-y-auto">
+              <div className="max-h-[70vh] overflow-y-auto">
                 {extraLoading ? (
                   <div className="space-y-2 p-4"><Skeleton className="h-12" /><Skeleton className="h-12" /></div>
                 ) : lessons.length === 0 ? (
                   <p className="p-4 text-center text-sm text-muted">لا توجد دروس بعد.</p>
                 ) : (
                   <ul>
-                    {lessons.map((l, i) => {
+                    {lessons.map((l) => {
                       const accessible = l.accessible === true || l.is_free === true;
                       const isActive = l.lesson_id === lessonId;
                       return (
@@ -323,7 +315,7 @@ export default function LessonView() {
                     </p>
                     {activeLesson?.video_url && !isLessonAccessible && (
                       <div className="max-w-md text-center space-y-3">
-                        <p className="text-sm text-muted">هذا الدرس متاح للطلاب المشتركين فقط.</p>
+                        <p className="text-sm text-muted">هذا الدرس متاح للطلاب المشتركين فقط. اشترك في الكورس علشان تشوف الفيديو.</p>
                         {!effectiveAccess && !isProfessional && (
                           <Button variant="secondary" onClick={() => setShowSubscribe(true)}>
                             <Icon name="lock" className="h-4 w-4" /> اشترك في الكورس
@@ -445,5 +437,6 @@ export default function LessonView() {
     </div>
   );
 }
-
-export default LessonView;
+</parameter>
+</function>
+</tool_call>
