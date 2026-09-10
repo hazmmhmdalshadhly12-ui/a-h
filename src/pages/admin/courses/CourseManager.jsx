@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import AdminHeader from '../../../components/admin/AdminHeader.jsx';
@@ -213,4 +212,4 @@ export default function CourseManager() {
   );
 }
 
- default CourseManager;
+export default CourseManager;
