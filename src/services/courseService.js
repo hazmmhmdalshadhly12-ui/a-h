@@ -50,60 +50,55 @@ export async function deleteCourse(courseId) {
   return supabase.from('courses').delete().eq('id', courseId);
 }
 
-// ===== أقسام ودروس (أدمن) =====
+// ===== دروس (أدمن) - مبسطة: كورس → دروس مباشرة =====
 
-export async function fetchCourseSectionsAdmin(courseId) {
+export async function fetchCourseLessonsAdmin(courseId) {
   if (!courseId) return { data: [], error: null };
-  return supabase.rpc('get_course_sections_admin', { p_course_id: courseId });
+  return supabase
+    .from('lessons')
+    .select('*')
+    .eq('course_id', courseId)
+    .order('order_index', { ascending: true });
 }
 
-export async function addCourseSection(courseId, title, orderIndex = 0) {
-  return supabase.rpc('add_course_section', { p_course_id: courseId, p_title: title, p_order_index: orderIndex });
+export async function addCourseLesson(courseId, { title, description, videoUrl, videoProvider, durationMinutes, orderIndex, isFree }) {
+  return supabase.from('lessons').insert({
+    course_id: courseId,
+    title,
+    description,
+    video_url: videoUrl,
+    video_provider: videoProvider,
+    duration_minutes: durationMinutes,
+    order_index: orderIndex,
+    is_free: isFree
+  }).select().single();
 }
 
-export async function updateCourseSection(sectionId, title, orderIndex) {
-  return supabase.rpc('update_course_section', { p_section_id: sectionId, p_title: title, p_order_index: orderIndex });
-}
-
-export async function deleteCourseSection(sectionId) {
-  return supabase.rpc('delete_course_section', { p_section_id: sectionId });
-}
-
-export async function addCourseLesson(sectionId, { title, description, videoUrl, videoDuration, orderIndex, isFree }) {
-  return supabase.rpc('add_course_lesson', {
-    p_section_id: sectionId,
-    p_title: title,
-    p_description: description || '',
-    p_video_url: videoUrl || '',
-    p_video_duration: videoDuration || '',
-    p_order_index: orderIndex || 0,
-    p_is_free: isFree || false
-  });
-}
-
-export async function updateCourseLesson(lessonId, { title, description, videoUrl, videoDuration, orderIndex, isFree }) {
-  return supabase.rpc('update_course_lesson', {
-    p_lesson_id: lessonId,
-    p_title: title,
-    p_description: description || '',
-    p_video_url: videoUrl || '',
-    p_video_duration: videoDuration || '',
-    p_order_index: orderIndex || 0,
-    p_is_free: isFree || false
-  });
+export async function updateCourseLesson(lessonId, { title, description, videoUrl, videoProvider, durationMinutes, orderIndex, isFree }) {
+  return supabase.from('lessons').update({
+    title,
+    description,
+    video_url: videoUrl,
+    video_provider: videoProvider,
+    duration_minutes: durationMinutes,
+    order_index: orderIndex,
+    is_free: isFree
+  }).eq('id', lessonId).select().single();
 }
 
 export async function deleteCourseLesson(lessonId) {
-  return supabase.rpc('delete_course_lesson', { p_lesson_id: lessonId });
+  return supabase.from('lessons').delete().eq('id', lessonId);
+}
+
+export async function reorderLessons(lessonOrders) {
+  // lessonOrders = [{ id, order_index }, ...]
+  const updates = lessonOrders.map(({ id, order_index }) =>
+    supabase.from('lessons').update({ order_index }).eq('id', id)
+  );
+  return Promise.all(updates);
 }
 
 // ===== للطلاب (عبر دوال آمنة) =====
-
-/** جلب أقسام الكورس مع الدروس (للطالب) — مع حالة الوصول لكل درس */
-export async function fetchCourseSectionsWithLessons(courseId) {
-  if (!courseId) return { data: [], error: null };
-  return supabase.rpc('get_course_sections_with_lessons', { p_course_id: courseId });
-}
 
 export async function fetchCourseLessons(courseId) {
   if (!courseId) return { data: [], error: null };
