@@ -3,6 +3,11 @@
 -- هيكل مبسط: كورس → دروس (من غير أقسام)
 -- ============================================================
 
+-- حذف الدوال القديمة لو موجودة (عدا can_access_course اللي عليها سياسات)
+drop function if exists public.get_course_lessons(uuid);
+drop function if exists public.can_access_lesson(uuid);
+drop function if exists public.get_student_courses(text);
+
 -- ============================================================
 -- 1) جدول الدروس - مرتبط بالكورس مباشرة
 -- ============================================================

@@ -1,10 +1,14 @@
 -- ============================================================
--- 031_fix_course_visibility.sql
+-- 032_fix_course_visibility.sql
 -- إصلاح رؤية الكورسات: كل طالب يشوف كورسات صفه (مقفولة أو مفتوحة)
--- فصل "الرؤية" عن "الوصول للمحتوى"
+-- فصل "الرؤية" عن "الوصول"
 -- ============================================================
 
--- 1) تعديل سياسة قراءة الكورسات: كل طالب يشوف كورسات صفه + الاحترافي المنشور
+-- 1) إضافة عمود is_published لو مش موجود
+alter table public.courses
+  add column if not exists is_published boolean not null default true;
+
+-- 2) تعديل سياسة قراءة الكورسات: كل طالب يشوف كورسات صفه + الاحترافي المنشور
 -- الأدمن يشوف الكل
 drop policy if exists "courses: read accessible or admin" on public.courses;
 
@@ -15,9 +19,6 @@ create policy "courses: student read own grade or published professional"
     or grade = (select grade from public.profiles where id = auth.uid())
     or (grade = 'professional' and is_published = true)
   );
-
--- ملاحظة: السياسات على course_files, course_comments, إلخ بتستخدم can_access_course
--- اللي بتيجي للـ "وصول للمحتوى" مش "الرؤية" - دي تفضل زي ما هي.
 
 -- تحديث دالة get_student_courses لتعمل مع السياسة الجديدة
 create or replace function public.get_student_courses(p_grade text)
