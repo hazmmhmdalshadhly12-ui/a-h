@@ -12,8 +12,8 @@ create policy "courses: student read own grade or published professional"
   on public.courses for select to authenticated
   using (
     public.is_admin()
-    or c.grade = (select grade from public.profiles where id = auth.uid())
-    or (c.grade = 'professional' and c.is_published = true)
+    or grade = (select grade from public.profiles where id = auth.uid())
+    or (grade = 'professional' and is_published = true)
   );
 
 -- ملاحظة: السياسات على course_files, course_comments, إلخ بتستخدم can_access_course
