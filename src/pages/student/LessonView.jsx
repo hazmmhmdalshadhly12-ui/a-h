@@ -92,7 +92,7 @@ export default function LessonView() {
 
   const isProfessional = course.grade === 'professional';
   const isMyGrade = profile?.grade === course.grade;
-  const effectiveAccess = canAccess || Boolean(course?.accessible);
+  const effectiveAccess = course?.accessible ?? false;
   const canWatch = Boolean(profile) && effectiveAccess && (isProfessional || isMyGrade);
 
   const activeLesson = lessons.find(l => l.lesson_id === lessonId);
@@ -154,7 +154,7 @@ export default function LessonView() {
     setUploadFile(null);
     const { data } = await supabase.rpc('get_course_files', { p_course_id: courseId });
     setFiles(data || []);
-  };
+  }
 
   const removeFile = async (fileId) => {
     if (!window.confirm('حذف هذا الملف؟')) return;
@@ -376,7 +376,7 @@ export default function LessonView() {
                     <p className="text-sm text-muted">لا توجد ملفات بعد.</p>
                   ) : (
                     <ul className="divide-y divide-ink-700/60">
-                      {files.map((f) => {
+                      {files.map(f => {
                         const mine = f.uploaded_by === profile?.id;
                         return (
                           <li key={f.file_id} className="flex items-center justify-between gap-3 py-2.5">
