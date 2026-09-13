@@ -31,7 +31,7 @@ const EMPTY_LESSON = {
   is_free: false
 };
 
-export default function CourseManager() {
+function CourseManager() {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
