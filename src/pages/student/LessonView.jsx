@@ -288,13 +288,24 @@ export default function LessonView() {
               <div className="card-panel overflow-hidden rounded-lens">
                 {isLessonAccessible && videoUrl ? (
                   <div className="aspect-video w-full">
-                    <iframe
-                      src={videoUrl}
-                      title={activeLesson?.title || course.title}
-                      className="h-full w-full"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
+                    {videoUrl.includes('supabase.co/storage') ? (
+                      {/* فيديو من Supabase Storage - استخدم video tag */}
+                      <video 
+                        src={videoUrl} 
+                        className="w-full h-full" 
+                        controls 
+                        allowFullScreen
+                      />
+                    ) : (
+                      {/* فيديو YouTube - استخدم iframe */}
+                      <iframe
+                        src={videoUrl}
+                        title={activeLesson?.title || course.title}
+                        className="h-full w-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    )}
                   </div>
                 ) : (
                   <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-ink-900/60">
