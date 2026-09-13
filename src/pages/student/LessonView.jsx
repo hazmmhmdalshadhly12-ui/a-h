@@ -1,3 +1,4 @@
+
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth.js';
@@ -70,8 +71,8 @@ export default function LessonView() {
           if (firstAccessible) navigate(`/student/courses/${courseId}/lesson/${firstAccessible.lesson_id}`, { replace: true });
         }
 
-        const contentBased = lessonList.length > 0 || hwList.length > 0 || (f.data && f.data.length > 0);
-        setCanAccess(contentBased || (course?.accessible ?? false));
+        // استخدام accessible من السيرفر مباشرة
+        setCanAccess(course?.accessible ?? false);
         setExtraLoading(false);
       })
       .catch(() => setExtraLoading(false));
@@ -131,7 +132,7 @@ export default function LessonView() {
     toast.success('تم الحذف');
     const { data } = await supabase.rpc('get_course_comments', { p_course_id: courseId });
     setComments(data || []);
-  };
+  }
 
   // ===== رفع ملف (الطالب) =====
   const submitUpload = async (e) => {
@@ -184,7 +185,7 @@ export default function LessonView() {
     setSubmittingSub(false);
     if (error) return toast.error(getFriendlyError(error, 'فشل إرسال طلب الاشتراك'));
     toast.success('تم إرسال طلب اشتراكك — قيد مراجعة المستر');
-  };
+  }
 
   const gradeLabel = GRADE_SHORT[course.grade] || course.grade;
 
@@ -247,8 +248,8 @@ export default function LessonView() {
                 <li>محفظة كاش غير متوفر الآن — التحويل يكون من رقم مضمون بإسمك</li>
               </ul>
               <form onSubmit={submitSubscription} className="grid gap-3 sm:grid-cols-2">
-                <input name="parent_phone" label="موبايل ولي الأمر (اختياري)" dir="ltr" placeholder="01xxxxxxxxx" value={subForm.parent_phone} onChange={e => setSubForm({...subForm, parent_phone: e.target.value})} className="input-base" />
-                <input name="transfer_number" label="الرقم اللي حولت منه *" dir="ltr" placeholder="01xxxxxxxxx" value={subForm.transfer_number} onChange={e => setSubForm({...subForm, transfer_number: e.target.value})} className="input-base" required />
+                <input name="parent_phone" label="موبايل ولي الأمر (اختياري)" dir="ltr" placeholder="01xxxxxxxxx" value={subForm.parent_phone} onChange={(e) => setSubForm({...subForm, parent_phone: e.target.value})} className="input-base" />
+                <input name="transfer_number" label="الرقم اللي حولت منه *" dir="ltr" placeholder="01xxxxxxxxx" value={subForm.transfer_number} onChange={(e) => setSubForm({...subForm, transfer_number: e.target.value})} className="input-base" required />
                 <div className="sm:col-span-2"><Button type="submit" loading={submittingSub} className="w-full">إرسال طلب الاشتراك</Button></div>
               </form>
               <p className="text-xs text-muted">بعد الإرسال هتنتظر المستر يؤكد اشتراكك.</p>
@@ -461,3 +462,9 @@ export default function LessonView() {
     </div>
   );
 }
+</parameter>
+<parameter=filePath>
+C:\Users\ibrhem\Documents\vision-academy\src\pages\student\LessonView.jsx
+</parameter>
+</function>
+</tool_call>
