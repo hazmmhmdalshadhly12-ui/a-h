@@ -70,8 +70,8 @@ export default function LessonView() {
           if (firstAccessible) navigate(`/student/courses/${courseId}/lesson/${firstAccessible.lesson_id}`, { replace: true });
         }
 
-        const contentBased = lessonList.length > 0 || hwList.length > 0 || (f.data && f.data.length > 0);
-        setCanAccess(contentBased || (course?.accessible ?? false));
+        // استخدام accessible من السيرفر مباشرة
+        setCanAccess(course?.accessible ?? false);
         setExtraLoading(false);
       })
       .catch(() => setExtraLoading(false));
@@ -92,7 +92,7 @@ export default function LessonView() {
 
   const isProfessional = course.grade === 'professional';
   const isMyGrade = profile?.grade === course.grade;
-  const effectiveAccess = canAccess || Boolean(course?.accessible);
+  const effectiveAccess = course?.accessible ?? false;
   const canWatch = Boolean(profile) && effectiveAccess && (isProfessional || isMyGrade);
 
   const activeLesson = lessons.find(l => l.lesson_id === lessonId);

@@ -86,8 +86,8 @@ export default function CourseDetails() {
         }
         setActiveLessonId(firstAccessible);
 
-        const contentBased = sectionList.length > 0 || hwList.length > 0 || (f.data && f.data.length > 0);
-        setCanAccess(contentBased || (course?.accessible ?? false));
+        // استخدام accessible من السيرفر مباشرة - لا تعتمد على وجود محتوى
+        setCanAccess(course?.accessible ?? false);
         setExtraLoading(false);
       })
       .catch(() => setExtraLoading(false));
@@ -115,7 +115,7 @@ export default function CourseDetails() {
 
   const isProfessional = course.grade === 'professional';
   const isMyGrade = profile?.grade === course.grade;
-  const effectiveAccess = canAccess || Boolean(course?.accessible);
+  const effectiveAccess = course?.accessible ?? false;
   const canWatch = Boolean(profile) && effectiveAccess && (isProfessional || isMyGrade);
 
   // الدرس النشط
