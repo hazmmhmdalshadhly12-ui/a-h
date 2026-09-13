@@ -70,7 +70,6 @@ export default function LessonView() {
           if (firstAccessible) navigate(`/student/courses/${courseId}/lesson/${firstAccessible.lesson_id}`, { replace: true });
         }
 
-        // استخدام accessible من السيرفر مباشرة
         setCanAccess(course?.accessible ?? false);
         setExtraLoading(false);
       })
@@ -203,14 +202,6 @@ export default function LessonView() {
   const videoUrl = toEmbedUrl(rawVideoUrl);
   const instagram = PAYMENT_INFO.instagramNumber;
 
-  function toEmbedUrl(url) {
-    if (!url) return '';
-    if (url.includes('/embed/')) return url;
-    const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
-    if (match) return `https://www.youtube.com/embed/${match[1]}`;
-    return url;
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -313,7 +304,6 @@ export default function LessonView() {
                 {isLessonAccessible && videoUrl ? (
                   <div className="aspect-video w-full">
                     {isSupabaseStorage ? (
-                      {/* فيديو من Supabase Storage - استخدم video tag */}
                       <video 
                         src={rawVideoUrl} 
                         className="w-full h-full" 
@@ -321,7 +311,6 @@ export default function LessonView() {
                         allowFullScreen
                       />
                     ) : (
-                      {/* فيديو YouTube - استخدم iframe */}
                       <iframe
                         src={videoUrl}
                         title={activeLesson?.title || course.title}
