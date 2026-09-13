@@ -70,8 +70,8 @@ export default function LessonView() {
           if (firstAccessible) navigate(`/student/courses/${courseId}/lesson/${firstAccessible.lesson_id}`, { replace: true });
         }
 
-        // استخدام accessible من السيرفر مباشرة
-        setCanAccess(course?.accessible ?? false);
+        const contentBased = lessonList.length > 0 || hwList.length > 0 || (f.data && f.data.length > 0);
+        setCanAccess(contentBased || (course?.accessible ?? false));
         setExtraLoading(false);
       })
       .catch(() => setExtraLoading(false));
@@ -92,13 +92,23 @@ export default function LessonView() {
 
   const isProfessional = course.grade === 'professional';
   const isMyGrade = profile?.grade === course.grade;
-  const effectiveAccess = course?.accessible ?? false;
+  const effectiveAccess = canAccess || Boolean(course?.accessible);
   const canWatch = Boolean(profile) && effectiveAccess && (isProfessional || isMyGrade);
 
   const activeLesson = lessons.find(l => l.lesson_id === lessonId);
   const isLessonAccessible = activeLesson?.accessible === true || activeLesson?.is_free === true;
-  const videoUrl = toEmbedUrl(activeLesson?.video_url || course.video_url);
+  const rawVideoUrl = activeLesson?.video_url || course.video_url;
+  const isSupabaseStorage = rawVideoUrl?.includes('supabase.co/storage') ?? false;
+  const videoUrl = toEmbedUrl(rawVideoUrl);
   const instagram = PAYMENT_INFO.instagramNumber;
+
+  function toEmbedUrl(url) {
+    if (!url) return '';
+    if (url.includes('/embed/')) return url;
+    const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+    if (match) return `https://www.youtube.com/embed/${match[1]}`;
+    return url;
+  }
 
   // ===== التعليقات =====
   const submitComment = async (e) => {
@@ -153,7 +163,7 @@ export default function LessonView() {
     toast.success('تم الحذف');
     const { data } = await supabase.rpc('get_course_files', { p_course_id: courseId });
     setFiles(data || []);
-  };
+  }
 
   // ===== اشتراك احترافي =====
   const submitSubscription = async (e) => {
@@ -185,6 +195,20 @@ export default function LessonView() {
         <Link to={`/student/courses/${courseId}`}><Button variant="secondary">رجوع للكورس</Button></Link>
       </Card>
     );
+  }
+
+  const isLessonAccessible = activeLesson?.accessible === true || activeLesson?.is_free === true;
+  const rawVideoUrl = activeLesson?.video_url || course.video_url;
+  const isSupabaseStorage = rawVideoUrl?.includes('supabase.co/storage') ?? false;
+  const videoUrl = toEmbedUrl(rawVideoUrl);
+  const instagram = PAYMENT_INFO.instagramNumber;
+
+  function toEmbedUrl(url) {
+    if (!url) return '';
+    if (url.includes('/embed/')) return url;
+    const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+    if (match) return `https://www.youtube.com/embed/${match[1]}`;
+    return url;
   }
 
   return (
@@ -288,14 +312,16 @@ export default function LessonView() {
               <div className="card-panel overflow-hidden rounded-lens">
                 {isLessonAccessible && videoUrl ? (
                   <div className="aspect-video w-full">
-                    {videoUrl.includes('supabase.co/storage') ? (
+                    {isSupabaseStorage ? (
+                      {/* فيديو من Supabase Storage - استخدم video tag */}
                       <video 
-                        src={videoUrl} 
+                        src={rawVideoUrl} 
                         className="w-full h-full" 
                         controls 
                         allowFullScreen
                       />
                     ) : (
+                      {/* فيديو YouTube - استخدم iframe */}
                       <iframe
                         src={videoUrl}
                         title={activeLesson?.title || course.title}
@@ -340,9 +366,9 @@ export default function LessonView() {
                 <div className="flex items-center gap-2"><Icon name="download" className="h-5 w-5 text-signal" /><h2 className="font-display text-lg font-bold">ملفات الدرس ({files.length})</h2></div>
                 <Card className="space-y-4">
                   <form onSubmit={submitUpload} className="grid gap-3 sm:grid-cols-3">
-                    <input name="upload_title" label="اسم ملفك" placeholder="مثال: حل التمارين" value={uploadTitle} onChange={e => setUploadTitle(e.target.value)} className="input-base" />
+                    <input name="upload_title" label="اسم ملفك" placeholder="مثال: حل التمارين" value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} className="input-base" />
                     <div className="flex items-end">
-                      <input type="file" accept=".pdf,.zip" onChange={e => setUploadFile(e.target.files?.[0] || null)} className="focus-ring block w-full rounded-lens border border-ink-600 bg-ink-900 px-3 py-2 text-sm text-paper file:mr-3 file:rounded-lens file:border-0 file:bg-signal/15 file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-signal" />
+                      <input type="file" accept=".pdf,.zip" onChange={(e) => setUploadFile(e.target.files?.[0] || null)} className="focus-ring block w-full rounded-lens border border-ink-600 bg-ink-900 px-3 py-2 text-sm text-paper file:mr-3 file:rounded-lens file:border-0 file:bg-signal/15 file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-signal" />
                     </div>
                     <div className="flex items-end"><Button type="submit" loading={uploadSubmitting}>رفع ملف</Button></div>
                   </form>
@@ -350,7 +376,7 @@ export default function LessonView() {
                     <p className="text-sm text-muted">لا توجد ملفات بعد.</p>
                   ) : (
                     <ul className="divide-y divide-ink-700/60">
-                      {files.map(f => {
+                      {files.map((f) => {
                         const mine = f.uploaded_by === profile?.id;
                         return (
                           <li key={f.file_id} className="flex items-center justify-between gap-3 py-2.5">
@@ -382,14 +408,14 @@ export default function LessonView() {
                 <div className="flex items-center gap-2"><Icon name="chat" className="h-5 w-5 text-signal" /><h2 className="font-display text-lg font-bold">تعليقات ({comments.length})</h2></div>
                 <Card className="space-y-4">
                   <form onSubmit={submitComment} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                    <textarea name="comment" label="اكتب تعليق أو سؤال للمستر" rows={2} placeholder="اسأل أو شارك معلومة..." value={commentBody} onChange={e => setCommentBody(e.target.value)} className="input-base min-h-[80px] resize-y" />
+                    <textarea name="comment" label="اكتب تعليق أو سؤال للمستر" rows={2} placeholder="اسأل أو شارك معلومة..." value={commentBody} onChange={(e) => setCommentBody(e.target.value)} className="input-base min-h-[80px] resize-y" />
                     <Button type="submit" loading={commentSubmitting}><Icon name="send" className="h-4 w-4" /> إرسال</Button>
                   </form>
                   {comments.length === 0 ? (
                     <p className="text-sm text-muted">لا توجد تعليقات بعد — كن أول من يعلق.</p>
                   ) : (
                     <ul className="space-y-3">
-                      {comments.map(c => {
+                      {comments.map((c) => {
                         const mine = c.student_id === profile?.id;
                         return (
                           <li key={c.comment_id} className="rounded-lens bg-ink-800/60 p-3">
@@ -413,7 +439,7 @@ export default function LessonView() {
                   <Card className="text-sm text-muted">لا توجد واجبات في هذا الكورس حالياً.</Card>
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {homeworks.map(h => (
+                    {homeworks.map((h) => (
                       <Card key={h.homework_id} className="flex flex-col gap-2.5">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex h-10 w-10 items-center justify-center rounded-lens bg-signal/15 text-signal"><Icon name="edit" className="h-5 w-5" /></div>
