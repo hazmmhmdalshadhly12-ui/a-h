@@ -289,7 +289,6 @@ export default function LessonView() {
                 {isLessonAccessible && videoUrl ? (
                   <div className="aspect-video w-full">
                     {videoUrl.includes('supabase.co/storage') ? (
-                      {/* فيديو من Supabase Storage - استخدم video tag */}
                       <video 
                         src={videoUrl} 
                         className="w-full h-full" 
@@ -297,7 +296,6 @@ export default function LessonView() {
                         allowFullScreen
                       />
                     ) : (
-                      {/* فيديو YouTube - استخدم iframe */}
                       <iframe
                         src={videoUrl}
                         title={activeLesson?.title || course.title}
