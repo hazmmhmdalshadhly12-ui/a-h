@@ -4,17 +4,18 @@ import { cookieStorage, COOKIE_PREFIX } from './cookieStorage.js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Production fallback values (project: yvkjqdmitwouluiqkuvv)
 const FALLBACK_URL = 'https://yvkjqdmitwouluiqkuvv.supabase.co';
 const FALLBACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2a2pxZG1pdHdvdWx1aXFrdXZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc2NzMwMDAsImV4cCI6MjA3MzI0OTAwMH0.placeholder_key_for_build';
 
-const url = supabaseUrl || 'https://yvkjqdmitwouluiqkuvv.supabase.co';
-const key = supabaseAnonKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2a2pxZG1pdHdvdWx1aXFrdXZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc2NzMwMDAsImV4cCI6MjA3MzI0OTAwMH0.placeholder_key_for_build';
+let supabaseInstance = null;
 
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL || 'https://yvkjqdmitwouluiqkuvv.supabase.co',
-  import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2a2pxZG1pdHdvdWx1aXFrdXZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc2NzMwMDAsImV4cCI6MjA3MzI0OTAwMH0.placeholder_key_for_build',
-  {
+function getSupabase() {
+  if (supabaseInstance) return supabaseInstance;
+  
+  const url = import.meta.env.VITE_SUPABASE_URL || 'https://yvkjqdmitwouluiqkuvv.supabase.co';
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2a2pxZG1pdHdvdWx1aXFrdXZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc2NzMwMDAsImV4cCI6MjA3MzI0OTAwMH0.placeholder_key_for_build';
+  
+  supabaseInstance = createClient(url, key, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
@@ -22,8 +23,18 @@ export const supabase = createClient(
       storage: cookieStorage,
       storageKey: COOKIE_PREFIX
     }
+  });
+  
+  return supabaseInstance;
+}
+
+// Export a proxy that initializes on first access
+export const supabase = new Proxy({}, {
+  get(target, prop) {
+    const client = getSupabase();
+    return client[prop];
   }
-);
+});
 
 export const isSupabaseConfigured = Boolean(
   import.meta.env.VITE_SUPABASE_URL && 
