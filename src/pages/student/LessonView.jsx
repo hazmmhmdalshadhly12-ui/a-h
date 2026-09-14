@@ -29,7 +29,7 @@ export default function LessonView() {
   const { courseId, lessonId } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const { course, loading: courseLoading } = useCourse(courseId, null);
+  const { course, loading: courseLoading } = useCourse(courseId, profile?.grade);
   const toast = useToast();
 
   const [lessons, setLessons] = useState([]);
@@ -39,7 +39,6 @@ export default function LessonView() {
   const [extraLoading, setExtraLoading] = useState(true);
   const [canAccess, setCanAccess] = useState(false);
   const [loadError, setLoadError] = useState(null);
-  const [debugInfo, setDebugInfo] = useState(null);
 
   const [commentBody, setCommentBody] = useState('');
   const [commentSubmitting, setCommentSubmitting] = useState(false);
@@ -83,17 +82,6 @@ export default function LessonView() {
         }
 
         setCanAccess(course?.accessible ?? false);
-        setDebugInfo({
-          lessonCount: lessonList.length,
-          lessonIds: lessonList.map((x) => x.lesson_id),
-          currentLessonId: lessonId || null,
-          activeFound: Boolean(lessonList.find((x) => x.lesson_id === lessonId)),
-          courseAccessible: course?.accessible ?? null,
-          lessonsError: l?.error ? String(l.error.message || l.error) : null,
-          homeworksError: h?.error ? String(h.error.message || h.error) : null,
-          filesError: f?.error ? String(f.error.message || f.error) : null,
-          commentsError: c?.error ? String(c.error.message || c.error) : null
-        });
         setExtraLoading(false);
       })
       .catch((err) => {
@@ -206,45 +194,15 @@ export default function LessonView() {
 
   if (!activeLesson && !extraLoading) {
     return (
-      <div className="space-y-6">
-        <Card className="border border-warning/30 bg-warning/5 p-4">
-          <h4 className="mb-2 font-bold text-paper">تشخيص الدرس</h4>
-          <pre dir="ltr" className="overflow-auto rounded-lens bg-ink-900 p-3 font-mono text-xs leading-6 text-paper/90">
-            {JSON.stringify(
-              {
-                courseId,
-                lessonIdFromUrl: lessonId,
-                lessonsReturned: lessons.length,
-                lessonIds: lessons.map((x) => x.lesson_id),
-                lessonsAccessible: lessons.map((x) => ({ id: x.lesson_id, accessible: x.accessible, is_free: x.is_free })),
-                courseAccessible: course?.accessible ?? null,
-                loadError
-              },
-              null,
-              2
-            )}
-          </pre>
-        </Card>
-        <Card className="flex flex-col items-center gap-4 py-14 text-center">
-          <p className="text-muted">الدرس غير موجود.</p>
-          <p className="text-xs text-muted">تأكد إن الدرس موجود في الكورس وإن الرابط صحيح.</p>
-          <Link to={`/student/courses/${courseId}`}><Button variant="secondary">رجوع للكورس</Button></Link>
-        </Card>
-      </div>
+      <Card className="flex flex-col items-center gap-4 py-14 text-center">
+        <p className="text-muted">الدرس غير موجود.</p>
+        <Link to={`/student/courses/${courseId}`}><Button variant="secondary">رجوع للكورس</Button></Link>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-6">
-      {debugInfo && (
-        <Card className="border border-stream/30 bg-stream/5 p-4">
-          <h4 className="mb-2 font-bold text-paper">تشخيص التحميل</h4>
-          <pre dir="ltr" className="overflow-auto rounded-lens bg-ink-900 p-3 font-mono text-xs leading-6 text-paper/90">
-            {JSON.stringify(debugInfo, null, 2)}
-          </pre>
-        </Card>
-      )}
-
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="font-mono text-xs text-stream">#{String(course.order_index || 1).padStart(2, '0')} — {gradeLabel}</p>
