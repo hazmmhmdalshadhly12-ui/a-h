@@ -70,7 +70,8 @@ export default function LessonView() {
           if (firstAccessible) navigate(`/student/courses/${courseId}/lesson/${firstAccessible.lesson_id}`, { replace: true });
         }
 
-        setCanAccess(course?.accessible ?? false);
+        const contentBased = lessonList.length > 0 || hwList.length > 0 || (f.data && f.data.length > 0);
+        setCanAccess(contentBased || (course?.accessible ?? false));
         setExtraLoading(false);
       })
       .catch(() => setExtraLoading(false));
@@ -91,7 +92,7 @@ export default function LessonView() {
 
   const isProfessional = course.grade === 'professional';
   const isMyGrade = profile?.grade === course.grade;
-  const effectiveAccess = course?.accessible ?? false;
+  const effectiveAccess = canAccess || Boolean(course?.accessible);
   const canWatch = Boolean(profile) && effectiveAccess && (isProfessional || isMyGrade);
 
   const activeLesson = lessons.find(l => l.lesson_id === lessonId);
@@ -130,7 +131,7 @@ export default function LessonView() {
     toast.success('تم الحذف');
     const { data } = await supabase.rpc('get_course_comments', { p_course_id: courseId });
     setComments(data || []);
-  }
+  };
 
   // ===== رفع ملف (الطالب) =====
   const submitUpload = async (e) => {
@@ -153,7 +154,7 @@ export default function LessonView() {
     setUploadFile(null);
     const { data } = await supabase.rpc('get_course_files', { p_course_id: courseId });
     setFiles(data || []);
-  }
+  };
 
   const removeFile = async (fileId) => {
     if (!window.confirm('حذف هذا الملف؟')) return;
@@ -183,7 +184,7 @@ export default function LessonView() {
     setSubmittingSub(false);
     if (error) return toast.error(getFriendlyError(error, 'فشل إرسال طلب الاشتراك'));
     toast.success('تم إرسال طلب اشتراكك — قيد مراجعة المستر');
-  }
+  };
 
   const gradeLabel = GRADE_SHORT[course.grade] || course.grade;
 
@@ -195,12 +196,6 @@ export default function LessonView() {
       </Card>
     );
   }
-
-  const isLessonAccessible = activeLesson?.accessible === true || activeLesson?.is_free === true;
-  const rawVideoUrl = activeLesson?.video_url || course.video_url;
-  const isSupabaseStorage = rawVideoUrl?.includes('supabase.co/storage') ?? false;
-  const videoUrl = toEmbedUrl(rawVideoUrl);
-  const instagram = PAYMENT_INFO.instagramNumber;
 
   return (
     <div className="space-y-6">
@@ -238,8 +233,8 @@ export default function LessonView() {
                 <li>محفظة كاش غير متوفر الآن — التحويل يكون من رقم مضمون بإسمك</li>
               </ul>
               <form onSubmit={submitSubscription} className="grid gap-3 sm:grid-cols-2">
-                <input name="parent_phone" label="موبايل ولي الأمر (اختياري)" dir="ltr" placeholder="01xxxxxxxxx" value={subForm.parent_phone} onChange={(e) => setSubForm({...subForm, parent_phone: e.target.value})} className="input-base" />
-                <input name="transfer_number" label="الرقم اللي حولت منه *" dir="ltr" placeholder="01xxxxxxxxx" value={subForm.transfer_number} onChange={(e) => setSubForm({...subForm, transfer_number: e.target.value})} className="input-base" required />
+                <input name="parent_phone" label="موبايل ولي الأمر (اختياري)" dir="ltr" placeholder="01xxxxxxxxx" value={subForm.parent_phone} onChange={e => setSubForm({...subForm, parent_phone: e.target.value})} className="input-base" />
+                <input name="transfer_number" label="الرقم اللي حولت منه *" dir="ltr" placeholder="01xxxxxxxxx" value={subForm.transfer_number} onChange={e => setSubForm({...subForm, transfer_number: e.target.value})} className="input-base" required />
                 <div className="sm:col-span-2"><Button type="submit" loading={submittingSub} className="w-full">إرسال طلب الاشتراك</Button></div>
               </form>
               <p className="text-xs text-muted">بعد الإرسال هتنتظر المستر يؤكد اشتراكك.</p>
@@ -365,7 +360,7 @@ export default function LessonView() {
                     <p className="text-sm text-muted">لا توجد ملفات بعد.</p>
                   ) : (
                     <ul className="divide-y divide-ink-700/60">
-                      {files.map(f => {
+                      {files.map((f) => {
                         const mine = f.uploaded_by === profile?.id;
                         return (
                           <li key={f.file_id} className="flex items-center justify-between gap-3 py-2.5">
