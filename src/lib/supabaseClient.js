@@ -11,9 +11,10 @@ const FALLBACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const finalUrl = supabaseUrl || FALLBACK_URL;
 const finalKey = supabaseAnonKey || 'placeholder_anon_key_for_build_only';
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey && supabaseUrl.includes('supabase.co'));
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey && supabaseUrl?.includes('supabase.co'));
 
-export const supabase = (() => {
+// Create supabase client with fallback for build time
+function createSupabaseClient() {
   try {
     return createClient(
       supabaseUrl || 'https://yvkjqdmitwouluiqkuvv.supabase.co',
@@ -50,7 +51,9 @@ export const supabase = (() => {
       functions: { invoke: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }) }
     };
   }
-})();
+}
+
+export const supabase = createSupabaseClient();
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey && supabaseUrl?.includes('supabase.co'));
 
