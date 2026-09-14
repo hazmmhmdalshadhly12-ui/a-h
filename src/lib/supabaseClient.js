@@ -8,10 +8,6 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const FALLBACK_URL = 'https://yvkjqdmitwouluiqkuvv.supabase.co';
 const FALLBACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2a2pxZG1pdHdvdWx1aXFrdXZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc2NzMwMDAsImV4cCI6MjA3MzI0OTAwMH0.placeholder_key_for_build';
 
-const finalUrl = supabaseUrl || FALLBACK_URL;
-const finalKey = supabaseAnonKey || 'placeholder_anon_key_for_build_only';
-
-// Create supabase client with fallback for build time
 function createSupabaseClient() {
   try {
     return createClient(
@@ -45,7 +41,12 @@ function createSupabaseClient() {
         rpc: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } })
       },
       rpc: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
-      storage: { from: () => ({ upload: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }), getPublicUrl: () => ({ data: { publicUrl: '' } }) }) },
+      storage: { 
+        from: () => ({ 
+          upload: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }), 
+          getPublicUrl: () => ({ data: { publicUrl: '' } }) 
+        }) 
+      },
       functions: { invoke: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }) }
     };
   }
