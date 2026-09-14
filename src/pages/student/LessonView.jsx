@@ -16,14 +16,7 @@ import { getFriendlyError } from '../../utils/errors.js';
 import { cn } from '../../lib/utils.js';
 import { formatDateTime } from '../../utils/formatDate.js';
 import { supabase } from '../../lib/supabaseClient.js';
-
-function toEmbedUrl(url) {
-  if (!url) return '';
-  if (url.includes('/embed/')) return url;
-  const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
-  if (match) return `https://www.youtube.com/embed/${match[1]}`;
-  return url;
-}
+import LessonVideoPlayer from '../../components/video/LessonVideoPlayer.jsx';
 
 export default function LessonView() {
   const { courseId, lessonId } = useParams();
@@ -116,8 +109,6 @@ export default function LessonView() {
   const activeLesson = lessons.find((l) => l.lesson_id === lessonId);
   const isLessonAccessible = activeLesson?.accessible === true || activeLesson?.is_free === true;
   const rawVideoUrl = activeLesson?.video_url || course.video_url;
-  const isSupabaseStorage = rawVideoUrl?.includes('supabase.co/storage') ?? false;
-  const videoUrl = toEmbedUrl(rawVideoUrl);
   const instagram = PAYMENT_INFO.instagramNumber;
   const gradeLabel = GRADE_SHORT[course.grade] || course.grade;
 
@@ -296,24 +287,12 @@ export default function LessonView() {
 
             <div className="space-y-6">
               <div className="card-panel overflow-hidden rounded-lens">
-                {isLessonAccessible && videoUrl ? (
-                  <div className="aspect-video w-full">
-                    {isSupabaseStorage ? (
-                      <video
-                        src={rawVideoUrl}
-                        className="h-full w-full"
-                        controls
-                      />
-                    ) : (
-                      <iframe
-                        src={videoUrl}
-                        title={activeLesson?.title || course.title}
-                        className="h-full w-full"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                      />
-                    )}
-                  </div>
+                {isLessonAccessible && rawVideoUrl ? (
+                  <LessonVideoPlayer
+                    videoUrl={rawVideoUrl}
+                    videoProvider={activeLesson?.video_provider}
+                    title={activeLesson?.title || course.title}
+                  />
                 ) : (
                   <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-ink-900/60">
                     <Icon name="lock" className="h-12 w-12 text-warning/60" />

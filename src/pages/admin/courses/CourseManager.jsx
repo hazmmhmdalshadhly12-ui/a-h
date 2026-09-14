@@ -10,7 +10,7 @@ import Badge from '../../../components/ui/Badge.jsx';
 import Icon from '../../../components/ui/Icon.jsx';
 import Skeleton from '../../../components/ui/Skeleton.jsx';
 import { useToast } from '../../../components/ui/Toast.jsx';
-import { fetchCourseLessonsAdmin, addCourseLesson, updateCourseLesson, deleteCourseLesson, reorderLessons } from '../../../services/courseService.js';
+import { fetchCourseLessonsAdmin, addCourseLesson, updateCourseLesson, deleteCourseLesson, reorderLessons, uploadCourseFile } from '../../../services/courseService.js';
 import { supabase } from '../../../lib/supabaseClient.js';
 import { GRADES } from '../../../config/site.js';
 import { getFriendlyError } from '../../../utils/errors.js';
@@ -31,7 +31,7 @@ const EMPTY_LESSON = {
   is_free: false
 };
 
-function CourseManager() {
+export default function CourseManager() {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
@@ -51,6 +51,21 @@ function CourseManager() {
     is_free: false
   });
   const [editingLessonId, setEditingLessonId] = useState(null);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+
+  const handleVideoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingVideo(true);
+    const { data, error } = await uploadCourseFile(file, { courseId });
+    setUploadingVideo(false);
+    if (error) {
+      toast.error(error.message || 'فشل رفع الفيديو');
+      return;
+    }
+    setLessonForm((f) => ({ ...f, video_url: data.fileUrl, video_provider: 'direct' }));
+    toast.success('تم رفع الفيديو على سيرفر المنصة');
+  };
 
   useEffect(() => {
     loadCourse();
@@ -153,6 +168,18 @@ function CourseManager() {
           <div className="grid gap-4 sm:grid-cols-2">
             <Input name="duration_minutes" label="المدة (دقيقة)" type="number" value={lessonForm.duration_minutes} onChange={e => setLessonForm({...lessonForm, duration_minutes: e.target.value})} />
             <Input name="video_url" label="رابط الفيديو" placeholder="https://youtube.com/watch?v=... أو رابط مباشر" value={lessonForm.video_url} onChange={e => setLessonForm({...lessonForm, video_url: e.target.value})} />
+          </div>
+          <div className="rounded-lens border border-ink-600 bg-ink-900/60 p-3.5">
+            <p className="mb-1.5 text-sm font-semibold text-paper">أو ارفع الفيديو على سيرفر المنصة</p>
+            <p className="mb-2 text-xs text-muted">الفيديو المرفوع هنا يشتغل بمشغّل المنصة بدون أي ظهور ليوتيوب (MP4/MOV).</p>
+            <input
+              type="file"
+              accept="video/mp4,video/m4v,video/quicktime,video/webm,.mp4,.m4v,.mov,.webm"
+              onChange={handleVideoUpload}
+              disabled={uploadingVideo}
+              className="focus-ring block w-full rounded-lens border border-ink-600 bg-ink-900 px-3 py-2 text-sm text-paper file:mr-3 file:rounded-lens file:border-0 file:bg-signal/15 file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-signal disabled:opacity-50"
+            />
+            {uploadingVideo && <p className="mt-1.5 text-xs text-signal">جارٍ رفع الفيديو...</p>}
           </div>
           <Textarea name="description" label="وصف الدرس" rows={3} placeholder="شرح مختصر للدرس..." value={lessonForm.description} onChange={e => setLessonForm({...lessonForm, description: e.target.value})} />
           <label className="flex items-center gap-2">
