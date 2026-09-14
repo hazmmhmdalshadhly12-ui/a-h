@@ -5,10 +5,16 @@ import VisionLogo from '../vision/VisionLogo.jsx';
 import SidebarNav from './SidebarNav.jsx';
 import Icon from '../ui/Icon.jsx';
 import Button from '../ui/Button.jsx';
-import Badge from '../ui/Badge.jsx';
+import Badge from '../../components/ui/Badge.jsx';
 import { cn } from '../../lib/utils.js';
 import { supabase } from '../../lib/supabaseClient.js';
 import { useEffect, useState } from 'react';
+
+// Safe supabase wrapper
+const safeSupabase = supabase || {
+  rpc: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
+  from: () => ({ select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }) })
+};
 
 export default function StudentSidebar({ open, onClose }) {
   const { profile, signOut } = useAuth();
@@ -22,12 +28,12 @@ export default function StudentSidebar({ open, onClose }) {
       return;
     }
     setLoadingLessons(true);
-    supabase.rpc('get_course_lessons', { p_course_id: courseId })
+    safeSupabase.rpc('get_course_lessons', { p_course_id: courseId })
       .then(({ data }) => {
         setCourseLessons(data || []);
-        setLoadingLessons(false);
       })
-      .catch(() => setLoadingLessons(false));
+      .catch(() => {})
+      .finally(() => setLoadingLessons(false));
   }, [courseId]);
 
   return (
@@ -62,9 +68,10 @@ export default function StudentSidebar({ open, onClose }) {
                     <li key={l.lesson_id}>
                       <Link
                         to={`/student/courses/${courseId}/lesson/${l.lesson_id}`}
-                        className={`focus-ring flex w-full items-center gap-2 rounded-lens px-3 py-2 text-sm text-right transition hover:bg-ink-800/60 ${
+                        className={cn(
+                          'focus-ring flex w-full items-center gap-2 rounded-lens px-3 py-2 text-sm text-right transition hover:bg-ink-800/60',
                           l.accessible || l.is_free ? 'text-paper' : 'text-muted/70'
-                        }`}
+                        )}
                       >
                         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink-800 font-mono text-[10px] text-muted">
                           {String(l.order_index).padStart(2, '0')}
