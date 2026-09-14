@@ -292,6 +292,7 @@ export default function LessonView() {
                     videoUrl={rawVideoUrl}
                     videoProvider={activeLesson?.video_provider}
                     title={activeLesson?.title || course.title}
+                    watermark={profile?.phone || profile?.full_name || ''}
                   />
                 ) : (
                   <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-ink-900/60">
