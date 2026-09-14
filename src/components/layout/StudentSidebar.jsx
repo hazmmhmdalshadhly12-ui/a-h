@@ -60,8 +60,8 @@ export default function StudentSidebar({ open, onClose }) {
                   const accessible = l.accessible === true || l.is_free === true;
                   return (
                     <li key={l.lesson_id}>
-                      <a
-                        href={`/student/courses/${courseId}/lesson/${l.lesson_id}`}
+                      <Link
+                        to={`/student/courses/${courseId}/lesson/${l.lesson_id}`}
                         className={`focus-ring flex w-full items-center gap-2 rounded-lens px-3 py-2 text-sm text-right transition hover:bg-ink-800/60 ${
                           l.accessible || l.is_free ? 'text-paper' : 'text-muted/70'
                         }`}
@@ -72,7 +72,7 @@ export default function StudentSidebar({ open, onClose }) {
                         <span className="min-w-0 truncate font-medium text-sm">{l.title}</span>
                         {!accessible && <Badge color="warning" className="ml-auto text-[10px]">🔒</Badge>}
                         {l.is_free && <Badge color="success" className="ml-auto text-[10px]">🆓</Badge>}
-                      </a>
+                      </Link>
                     </li>
                   );
                 })}
