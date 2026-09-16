@@ -14,16 +14,23 @@ const PLATFORM_ICONS = {
   email: 'mail'
 };
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function isUrl(v) {
   return /^https?:\/\//.test(v);
 }
-
 function hrefFor(platform, value) {
-  if (isUrl(value)) return value;
-  if (platform === 'phone') return `tel:${value}`;
-  if (platform === 'whatsapp') return `https://wa.me/${value.replace(/\D/g, '')}`;
-  if (platform === 'email') return `mailto:${value}`;
-  return value;
+  const v = String(value || '').trim();
+  if (/^https?:\/\//.test(v)) {
+    try {
+      const u = new URL(v);
+      if (u.protocol !== 'https:' && u.protocol !== 'http:') return '#';
+      return u.href;
+    } catch { return '#'; }
+  }
+  if (platform === 'phone') return `tel:${v.replace(/[^0-9+]/g, '')}`;
+  if (platform === 'whatsapp') return `https://wa.me/${v.replace(/\D/g, '')}`;
+  if (platform === 'email') return EMAIL_RE.test(v) ? `mailto:${v}` : '#';
+  return '#';
 }
 
 export default function Contact() {
@@ -48,7 +55,7 @@ export default function Contact() {
                 key={link.id || link.platform}
                 href={hrefFor(link.platform, link.value)}
                 target={isUrl(link.value) ? '_blank' : undefined}
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="focus-ring block"
               >
                 <Card hover className="flex items-center gap-4">
