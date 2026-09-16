@@ -11,7 +11,8 @@ import Textarea from '../../components/ui/Textarea.jsx';
 import Skeleton from '../../components/ui/Skeleton.jsx';
 import SubscriptionGate from '../../components/academy/SubscriptionGate.jsx';
 import { supabase } from '../../lib/supabaseClient.js';
-import { fetchCourseHomeworks, fetchCourseFiles, fetchCourseComments, addCourseComment, deleteCourseComment, uploadCourseFile, addCourseFile, deleteCourseFile, courseFileDownloadUrl, fetchCourseSectionsWithLessons } from '../../services/courseService.js';
+import { fetchCourseHomeworks, fetchCourseFiles, fetchCourseComments, addCourseComment, deleteCourseComment, uploadCourseFile, addCourseFile, deleteCourseFile, courseFileDownloadUrl } from '../../services/courseService.js';
+import { supabase } from '../../lib/supabaseClient.js';
 import { createBooking } from '../../services/bookingService.js';
 import { useToast } from '../../components/ui/Toast.jsx';
 import { GRADE_SHORT } from '../../config/site.js';
@@ -35,12 +36,10 @@ export default function CourseDetails() {
   const { course, loading } = useCourse(courseId, profile?.grade);
   const toast = useToast();
 
-  // بيانات الكورس الجديدة: أقسام + دروس
-  const [sections, setSections] = useState([]);
+  const [lessons, setLessons] = useState([]);
   const [homeworks, setHomeworks] = useState([]);
   const [files, setFiles] = useState([]);
   const [comments, setComments] = useState([]);
-  const [activeLessonId, setActiveLessonId] = useState(null);
   const [extraLoading, setExtraLoading] = useState(true);
   const [canAccess, setCanAccess] = useState(false);
 
@@ -62,31 +61,18 @@ export default function CourseDetails() {
     if (!courseId) return;
     setExtraLoading(true);
     Promise.all([
-      fetchCourseSectionsWithLessons(courseId),
+      supabase.rpc('get_course_lessons', { p_course_id: courseId }),
       fetchCourseHomeworks(courseId),
       fetchCourseFiles(courseId),
       fetchCourseComments(courseId)
     ])
-      .then(([s, h, f, c]) => {
-        const sectionList = Array.isArray(s.data) ? s.data : [];
+      .then(([l, h, f, c]) => {
+        const lessonList = Array.isArray(l.data) ? l.data : [];
         const hwList = Array.isArray(h.data) ? h.data : [];
-        setSections(sectionList);
+        setLessons(lessonList);
         setHomeworks(hwList);
         setFiles(Array.isArray(f.data) ? f.data : []);
         setComments(Array.isArray(c.data) ? c.data : []);
-
-        // أول درس مفتوح تلقائياً
-        let firstAccessible = null;
-        for (const sec of sectionList) {
-          const found = sec.lesson_id && sec.lesson_accessible && sec.lesson_id;
-          if (found) {
-            firstAccessible = sec.lesson_id;
-            break;
-          }
-        }
-        setActiveLessonId(firstAccessible);
-
-        // استخدام accessible من السيرفر مباشرة - لا تعتمد على وجود محتوى
         setCanAccess(course?.accessible ?? false);
         setExtraLoading(false);
       })
@@ -117,17 +103,6 @@ export default function CourseDetails() {
   const isMyGrade = profile?.grade === course.grade;
   const effectiveAccess = course?.accessible ?? false;
   const canWatch = Boolean(profile) && effectiveAccess && (isProfessional || isMyGrade);
-
-  // الدرس النشط
-  let activeLesson = null;
-  for (const sec of sections) {
-    if (sec.lesson_id === activeLessonId) {
-      activeLesson = sec;
-      break;
-    }
-  }
-  const isLessonAccessible = activeLesson?.lesson_accessible === true || activeLesson?.lesson_is_free === true;
-  const videoUrl = toEmbedUrl(activeLesson?.lesson_video_url || course.video_url);
   const instagram = PAYMENT_INFO.instagramNumber;
 
   // ===== التعليقات =====
@@ -284,124 +259,76 @@ export default function CourseDetails() {
           </Card>
         ) : (
           <>
-            {/* ===== الأقسام + الدروس + الفيديو ===== */}
-            <div className="grid gap-6 lg:grid-cols-3">
-              {/* الشريط الجانبي: الأقسام والدروس */}
-              <Card className="overflow-hidden lg:col-span-1">
-                <div className="flex items-center gap-2 border-b border-ink-600 px-4 py-3">
-                  <Icon name="layers" className="h-4 w-4 text-signal" />
-                  <p className="font-display text-sm font-bold text-paper">الأقسام والدروس ({sections.length})</p>
+            {/* ===== قائمة الدروس — اختيار واضح (موبايل + ديسكتوب) ===== */}
+            <Card className="overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-600 bg-ink-800/50 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Icon name="layers" className="h-5 w-5 text-signal" />
+                  <p className="font-display text-sm font-bold text-paper">اختر درسًا للبدء</p>
+                  <Badge color="muted">{lessons.length} درس</Badge>
                 </div>
-                <div className="max-h-[70vh] overflow-y-auto">
-                  {extraLoading ? (
-                    <div className="space-y-2 p-4">
-                      <Skeleton className="h-12" />
-                      <Skeleton className="h-12" />
-                    </div>
-                  ) : sections.length === 0 ? (
-                    <p className="p-4 text-center text-sm text-muted">لا توجد أقسام بعد — تابعنا.</p>
-                  ) : (
-                    <ul>
-                      {sections.map((sec) => {
-                        const isSectionHeader = !sec.lesson_id;
-                        const isLesson = sec.lesson_id && sec.lesson_id !== null;
+                {effectiveAccess && <Badge color="success">مشترك</Badge>}
+                {!effectiveAccess && <Badge color="warning">يحتاج اشتراك</Badge>}
+              </div>
 
-                        if (isSectionHeader) {
-                          return (
-                            <li key={sec.section_id}>
-                              <div className="border-b border-ink-700/60 px-4 py-3">
-                                <p className="flex items-center gap-2">
-                                  <Icon name="folder" className="h-4 w-4 text-stream" />
-                                  <span className="font-semibold text-paper">{sec.section_title}</span>
-                                  <Badge color="muted" className="ml-auto">{sec.section_order}</Badge>
-                                </p>
-                                {sec.section_description && <p className="mt-1 text-xs text-muted">{sec.section_description}</p>}
-                              </div>
-                            </li>
-                          );
-                        }
-
-                        const accessible = sec.lesson_accessible === true || sec.lesson_is_free === true;
-                        return (
-                          <li key={sec.lesson_id}>
-                            <button
-                              type="button"
-                              onClick={() => setActiveLessonId(sec.lesson_id)}
-                              className={cn(
-                                'focus-ring flex w-full items-start gap-3 border-b border-ink-700/50 px-4 py-3 text-right transition hover:bg-ink-800/60',
-                                activeLessonId === sec.lesson_id && 'bg-signal/10',
-                                !accessible && 'opacity-70'
-                              )}
-                            >
-                              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink-800 font-mono text-xs text-muted">
-                                {String(sec.lesson_order).padStart(2, '0')}
-                              </span>
-                              <span className="min-w-0 flex-1">
-                                <span className="block text-sm font-semibold text-paper">{sec.lesson_title}</span>
-                                <span className="block text-xs text-muted">
-                                  {!accessible && <span className="text-warning">🔒 مقفول</span>}
-                                  {sec.lesson_video_url ? (accessible ? 'فيديو ✓' : 'فيديو 🔒') : ''}
-                                  {sec.lesson_is_free && <span className="text-success ml-2">🆓 مجاني</span>}
-                                </span>
-                              </span>
-                              {!accessible && <Icon name="lock" className="mt-1 h-4 w-4 shrink-0 text-warning/60" />}
-                              {activeLessonId === sec.lesson_id && accessible && <Icon name="check" className="mt-1 h-4 w-4 shrink-0 text-signal" />}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
+              {extraLoading ? (
+                <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <Skeleton className="h-32" />
+                  <Skeleton className="h-32" />
+                  <Skeleton className="h-32" />
                 </div>
-              </Card>
-
-              {/* منطقة الفيديو + المحتوى */}
-              <div className="space-y-6 lg:col-span-2">
-                <div className="card-panel overflow-hidden rounded-lens">
-                  {isLessonAccessible && videoUrl ? (
-                    <div className="aspect-video w-full">
-                      <iframe
-                        src={videoUrl}
-                        title={activeLesson?.lesson_title || course.title}
-                        className="h-full w-full"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-ink-900/60">
-                      <Icon name="lock" className="h-12 w-12 text-warning/60" />
-                      <p className="font-display text-lg font-bold text-paper">
-                        {activeLesson?.lesson_video_url ? 'هذا الدرس مقفول' : 'لا يوجد فيديو لهذا الدرس بعد'}
-                      </p>
-                      {activeLesson?.lesson_video_url && !isLessonAccessible && (
-                        <div className="max-w-md text-center space-y-3">
-                          <p className="text-sm text-muted">
-                            هذا الدرس متاح للطلاب المشتركين فقط. اشترك في الكورس علشان تشوف الفيديو.
-                          </p>
-                          {!effectiveAccess && !isProfessional && (
-                            <Button variant="secondary" onClick={() => setShowSubscribe(true)}>
-                              <Icon name="lock" className="h-4 w-4" /> اشترك في الكورس
+              ) : lessons.length === 0 ? (
+                <p className="p-8 text-center text-sm text-muted">لا توجد دروس بعد — تابعنا قريبًا.</p>
+              ) : (
+                <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {lessons.map((lesson) => {
+                    const accessible = lesson.accessible === true || lesson.is_free === true;
+                    return (
+                      <div
+                        key={lesson.lesson_id}
+                        className={`flex flex-col rounded-lens border p-4 transition ${accessible ? 'border-ink-600 bg-ink-900 hover:border-signal/40 hover:bg-ink-800' : 'border-ink-700 bg-ink-800/40 opacity-85'}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink-700 font-mono text-xs font-bold text-paper">
+                            {String(lesson.order_index).padStart(2, '0')}
+                          </span>
+                          <div className="flex shrink-0 items-center gap-1">
+                            {lesson.is_free && <Badge color="success">مجاني</Badge>}
+                            {!accessible && <Badge color="warning">مقفول</Badge>}
+                            {accessible && !lesson.is_free && <Badge color="stream">متاح</Badge>}
+                          </div>
+                        </div>
+                        <h3 className="mt-3 font-display text-sm font-bold leading-6 text-paper line-clamp-2">{lesson.title}</h3>
+                        {lesson.description && <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted">{lesson.description}</p>}
+                        <div className="mt-2 flex items-center gap-2 text-xs text-muted">
+                          {lesson.duration_minutes ? (
+                            <span className="flex items-center gap-1">
+                              <Icon name="clock" className="h-3.5 w-3.5" /> {lesson.duration_minutes} د
+                            </span>
+                          ) : (
+                            <span>فيديو</span>
+                          )}
+                          <span className="ms-auto font-mono text-[11px]">#{String(lesson.order_index).padStart(2, '0')}</span>
+                        </div>
+                        <div className="mt-4">
+                          {accessible ? (
+                            <Link to={`/student/courses/${courseId}/lesson/${lesson.lesson_id}`} className="block">
+                              <Button size="sm" className="w-full">
+                                <Icon name="play" className="h-4 w-4" /> شاهد الدرس
+                              </Button>
+                            </Link>
+                          ) : (
+                            <Button size="sm" variant="secondary" className="w-full" onClick={() => toast.info('هذا الدرس للمشتركين — اشترك من صفحة الحجوزات')}>
+                              <Icon name="lock" className="h-4 w-4" /> مقفول
                             </Button>
                           )}
-                          {effectiveAccess && !activeLesson?.lesson_accessible && activeLesson?.lesson_is_free === false && (
-                            <p className="text-xs text-muted">الدرس ده مش مجاني — تواصل مع المستر لو محتاج تشوفه.</p>
-                          )}
                         </div>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    );
+                  })}
                 </div>
-
-                {/* نص الدرس */}
-                {isLessonAccessible && activeLesson?.lesson_description && (
-                  <Card>
-                    <h2 className="mb-2 font-display text-lg font-bold">شرح الدرس</h2>
-                    <div className="whitespace-pre-wrap leading-relaxed text-muted">{activeLesson.lesson_description}</div>
-                  </Card>
-                )}
-              </div>
-            </div>
+              )}
+            </Card>
 
             {/* ===== الملفات (PDF/ZIP) ===== */}
             <section className="space-y-4">

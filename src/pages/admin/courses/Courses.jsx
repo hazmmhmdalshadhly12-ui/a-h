@@ -57,12 +57,12 @@ export default function Courses() {
       render: (c) => (c.video_url ? <Badge color="success">موجود</Badge> : <Badge color="warning">بدون</Badge>)
     },
     {
-      key: 'sections',
-      label: 'أقسام/دروس',
+      key: 'progress',
+      label: 'المتابعة',
       render: (c) => (
-        <Link to={`/admin/courses/${c.id}/sections`}>
+        <Link to={`/admin/courses/${c.id}/progress`}>
           <Button size="sm" variant="secondary">
-            <Icon name="layers" className="h-3.5 w-3.5" /> أقسام
+            <Icon name="eye" className="h-3.5 w-3.5" /> متابعة
           </Button>
         </Link>
       )
@@ -74,7 +74,7 @@ export default function Courses() {
         <div className="flex items-center gap-1.5">
           <Link to={`/admin/courses/${c.id}/manage`}>
             <Button size="sm" variant="secondary">
-              <Icon name="courses" className="h-3.5 w-3.5" />
+              <Icon name="layers" className="h-3.5 w-3.5" />
             </Button>
           </Link>
           <Link to={`/admin/courses/${c.id}`}>

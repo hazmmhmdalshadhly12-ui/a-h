@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useCourse } from '../../hooks/useCourses.js';
 import Card from '../../components/ui/Card.jsx';
@@ -17,6 +17,7 @@ import { cn } from '../../lib/utils.js';
 import { formatDateTime } from '../../utils/formatDate.js';
 import { supabase } from '../../lib/supabaseClient.js';
 import LessonVideoPlayer from '../../components/video/LessonVideoPlayer.jsx';
+import { recordLessonOpen, recordLessonProgress } from '../../services/lessonProgressService.js';
 
 export default function LessonView() {
   const { courseId, lessonId } = useParams();
@@ -42,6 +43,29 @@ export default function LessonView() {
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [subForm, setSubForm] = useState({ parent_phone: '', transfer_number: '' });
   const [submittingSub, setSubmittingSub] = useState(false);
+
+  // تتبع المشاهدة: كل 10 ثواني نرسل التقدم
+  const watchedRef = useRef(0);
+  const lastSentRef = useRef(0);
+  const handleProgress = useCallback(
+    ({ current }) => {
+      const c = Math.floor(current);
+      watchedRef.current = Math.max(watchedRef.current, c);
+      if (c - lastSentRef.current >= 10) {
+        lastSentRef.current = c;
+        if (activeLesson?.lesson_id) recordLessonProgress(activeLesson.lesson_id, watchedRef.current, c);
+      }
+    },
+    [activeLesson]
+  );
+
+  useEffect(() => {
+    if (activeLesson?.lesson_id) {
+      watchedRef.current = 0;
+      lastSentRef.current = 0;
+      recordLessonOpen(activeLesson.lesson_id);
+    }
+  }, [activeLesson?.lesson_id]);
 
   useEffect(() => {
     if (!courseId) return;
@@ -293,6 +317,7 @@ export default function LessonView() {
                     videoProvider={activeLesson?.video_provider}
                     title={activeLesson?.title || course.title}
                     watermark={profile?.phone || profile?.full_name || ''}
+                    onProgress={handleProgress}
                   />
                 ) : (
                   <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-ink-900/60">
