@@ -1,14 +1,37 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as nodemailer from "https://esm.sh/nodemailer@6.9";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const ALLOWED_ORIGINS = [
+  "https://hazem.blog",
+  "https://www.hazem.blog",
+  "https://hazmmhmdalshadhly12-ui.github.io",
+  "http://localhost:5173",
+  "http://localhost:4173",
+];
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get("origin") || "";
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+  }
+  return headers;
+}
+
+function esc(s: unknown): string {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function safeError(): string {
+  return "حدث خطأ أثناء إرسال الإشعار — حاول مرة أخرى";
+}
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -20,18 +43,59 @@ serve(async (req) => {
     });
   }
 
+  // مصادقة: لازم JWT صالح
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return new Response(JSON.stringify({ error: "غير مصرح" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
-    const { bookingData, studentData } = await req.json();
+    const bodyText = await req.text();
+    if (bodyText.length > 10000) {
+      return new Response(JSON.stringify({ error: "البيانات كبيرة جداً" }), {
+        status: 413,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const parsed = JSON.parse(bodyText);
+    const { bookingData, studentData } = parsed;
 
     if (!bookingData || !studentData) {
-      return new Response(JSON.stringify({ error: "Missing booking or student data" }), {
+      return new Response(JSON.stringify({ error: "بيانات ناقصة" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // تحقق من حجم الحقول وحدودها
+    const notes = String(bookingData.notes || "").slice(0, 500);
+    const fullName = String(studentData.full_name || "").slice(0, 100);
+    const phone = String(studentData.phone || "").slice(0, 20).replace(/[^0-9+]/g, "");
+    const parentPhone = String(studentData.parent_phone || "").slice(0, 20).replace(/[^0-9+]/g, "");
+    const transferNumber = String(bookingData.transfer_number || "").slice(0, 20).replace(/[^0-9+]/g, "");
+    const gradeRaw = String(bookingData.grade || "");
+    const allowedGrades = ["first_secondary", "second_secondary", "professional"];
+    const grade = allowedGrades.includes(gradeRaw) ? gradeRaw : "غير محدد";
+    const month = String(bookingData.month || "").slice(0, 7);
+
+    // تحقق من المستخدم عبر JWT
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: authError } = await authClient.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "غير مصرح" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { data: settings } = await supabase
@@ -48,39 +112,6 @@ serve(async (req) => {
       );
     }
 
-    // Gmail SMTP Config
-    const gmailUser = Deno.env.get("GMAIL_USER");
-    const gmailAppPass = Deno.env.get("GMAIL_APP_PASSWORD");
-
-    if (!gmailUser || !gmailAppPass) {
-      return new Response(
-        JSON.stringify({ error: "Gmail credentials not configured in Secrets" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true, // true for 465, false for 587
-      auth: {
-        user: gmailUser,
-        pass: gmailAppPass,
-      },
-    });
-
-    // Verify connection
-    try {
-      await transporter.verify();
-    } catch (verifyErr) {
-      console.error("Gmail SMTP verify failed:", verifyErr);
-      return new Response(JSON.stringify({ error: "Gmail SMTP authentication failed" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Email content
     const monthNames = [
       "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
       "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"
@@ -92,11 +123,11 @@ serve(async (req) => {
       professional: "الكورس الاحترافي",
     };
 
-    const monthStr = bookingData.month
-      ? `${monthNames[new Date(bookingData.month + "-01").getMonth()]} ${new Date(bookingData.month + "-01").getFullYear()}`
+    const monthStr = month
+      ? `${monthNames[new Date(month + "-01").getMonth()]} ${new Date(month + "-01").getFullYear()}`
       : "غير محدد";
 
-    const subject = `📚 طلب حجز جديد - ${studentData.full_name}`;
+    const subject = `طلب حجز جديد - ${esc(fullName)}`;
     const html = `
       <!DOCTYPE html>
       <html dir="rtl" lang="ar">
@@ -114,39 +145,39 @@ serve(async (req) => {
       </head>
       <body>
         <div class="header">
-          <h1>📚 طلب حجز جديد</h1>
+          <h1>طلب حجز جديد</h1>
           <p>وصل طلب حجز جديد من طالب في الأكاديمية</p>
         </div>
         <div class="content">
           <div class="field">
-            <div class="label">👤 اسم الطالب</div>
-            <div class="value">${studentData.full_name}</div>
+            <div class="label">اسم الطالب</div>
+            <div class="value">${esc(fullName)}</div>
           </div>
           <div class="field">
-            <div class="label">📱 رقم الطالب</div>
-            <div class="value">${studentData.phone}</div>
+            <div class="label">رقم الطالب</div>
+            <div class="value">${esc(phone)}</div>
           </div>
           <div class="field">
-            <div class="label">👨‍👦 رقم ولي الأمر</div>
-            <div class="value">${studentData.parent_phone || "غير محدد"}</div>
+            <div class="label">رقم ولي الأمر</div>
+            <div class="value">${esc(parentPhone) || "غير محدد"}</div>
           </div>
           <div class="field">
-            <div class="label">🎓 الصف</div>
-            <div class="value">${gradeLabels[bookingData.grade] || bookingData.grade}</div>
+            <div class="label">الصف</div>
+            <div class="value">${esc(gradeLabels[grade] || grade)}</div>
           </div>
           <div class="field">
-            <div class="label">📅 الشهر المطلوب</div>
-            <div class="value">${monthStr}</div>
+            <div class="label">الشهر المطلوب</div>
+            <div class="value">${esc(monthStr)}</div>
           </div>
-          ${bookingData.notes ? `
+          ${notes ? `
           <div class="field">
-            <div class="label">📝 ملاحظات الطالب</div>
-            <div class="value">${bookingData.notes}</div>
+            <div class="label">ملاحظات الطالب</div>
+            <div class="value">${esc(notes)}</div>
           </div>
           ` : ""}
           <div class="field">
-            <div class="label">💳 رقم التحويل</div>
-            <div class="value" style="font-family: monospace; direction: ltr;">${bookingData.transfer_number}</div>
+            <div class="label">رقم التحويل</div>
+            <div class="value" style="font-family: monospace; direction: ltr;">${esc(transferNumber)}</div>
           </div>
         </div>
         <div class="footer">
@@ -157,23 +188,41 @@ serve(async (req) => {
       </html>
     `;
 
-    // Send email
-    const info = await transporter.sendMail({
-      from: `"Vision Academy" <${gmailUser}>`,
-      to: adminEmail,
-      subject,
-      html,
-    });
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    if (resendApiKey) {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "Vision Academy <onboarding@resend.dev>",
+          to: [adminEmail],
+          subject,
+          html,
+        }),
+      });
 
-    console.log("Email sent:", info.messageId);
+      if (!res.ok) {
+        const err = await res.text();
+        console.error("Resend error:", err);
+        return new Response(JSON.stringify({ error: safeError() }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    } else {
+      console.log("Email would be sent to:", adminEmail);
+    }
 
-    return new Response(JSON.stringify({ success: true, messageId: info.messageId }), {
+    return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("send-booking-email error:", err);
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(JSON.stringify({ error: safeError() }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

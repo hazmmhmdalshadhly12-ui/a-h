@@ -19,9 +19,10 @@ export default {
           dark: '#E8E2D2'
         },
         signal: {
-          DEFAULT: '#F5B741',
-          light: '#FFD27A',
-          dark: '#D99422'
+          // اللون الرئيسي — بيشتغل بمتغيرات CSS عشان الطالب يغيّره من تفضيلاته
+          DEFAULT: 'rgb(var(--c-signal-rgb) / <alpha-value>)',
+          light: 'rgb(var(--c-signal-light-rgb) / <alpha-value>)',
+          dark: 'rgb(var(--c-signal-dark-rgb) / <alpha-value>)'
         },
         stream: {
           DEFAULT: '#5EEAD4',
@@ -41,7 +42,7 @@ export default {
         lens: '0.75rem'
       },
       boxShadow: {
-        signal: '0 0 0 1px rgba(245,183,65,0.35), 0 10px 40px -12px rgba(245,183,65,0.25)',
+        signal: '0 0 0 1px rgba(var(--c-signal-rgb), 0.35), 0 10px 40px -12px rgba(var(--c-signal-rgb), 0.25)',
         panel: '0 20px 60px -30px rgba(0,0,0,0.6)',
         glow: '0 0 24px -6px rgba(94,234,212,0.45)'
       },
