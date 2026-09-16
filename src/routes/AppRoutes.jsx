@@ -46,7 +46,6 @@ import CreateCourse from '../pages/admin/courses/CreateCourse.jsx';
 import EditCourse from '../pages/admin/courses/EditCourse.jsx';
 import CourseManager from '../pages/admin/courses/CourseManager.jsx';
 import CourseProgress from '../pages/admin/courses/CourseProgress.jsx';
-import AdminSections from '../pages/admin/sections/Sections.jsx';
 import AdminBookings from '../pages/admin/bookings/Bookings.jsx';
 import AdminCompetitions from '../pages/admin/competitions/Competitions.jsx';
 import CreateCompetition from '../pages/admin/competitions/CreateCompetition.jsx';
@@ -139,7 +138,6 @@ export default function AppRoutes() {
         <Route path="courses/:courseId" element={<EditCourse />} />
         <Route path="courses/:courseId/manage" element={<CourseManager />} />
         <Route path="courses/:courseId/progress" element={<CourseProgress />} />
-        <Route path="sections" element={<AdminSections />} />
         <Route path="materials" element={<AdminMaterials />} />
         <Route path="code-challenges" element={<CodeChallenges />} />
         <Route path="bookings" element={<AdminBookings />} />

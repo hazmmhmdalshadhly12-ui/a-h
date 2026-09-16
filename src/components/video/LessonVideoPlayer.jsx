@@ -358,6 +358,7 @@ function YouTubePlayer({ videoId, title, watermark, onProgress }) {
     []
   );
 
+  const boxRef = useRef(null);
   const syncProgress = useCallback(() => {
     const p = playerRef.current;
     if (!p || !p.getCurrentTime) return;
@@ -371,6 +372,13 @@ function YouTubePlayer({ videoId, title, watermark, onProgress }) {
       /* تجاهل */
     }
   }, [onProgress]);
+
+  const toggleFullscreen = () => {
+    const box = boxRef.current;
+    if (!box) return;
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else box.requestFullscreen?.().catch(() => {});
+  };
 
   const start = useCallback(async () => {
     setFailed(false);
@@ -490,9 +498,13 @@ function YouTubePlayer({ videoId, title, watermark, onProgress }) {
   }
 
   return (
-    <div className="w-full bg-black" dir="rtl" onContextMenu={(e) => e.preventDefault()}>
-      <div className="relative aspect-video w-full">
+    <div ref={boxRef} className="w-full bg-black" dir="rtl" onContextMenu={(e) => e.preventDefault()}>
+      <div className="relative aspect-video w-full overflow-hidden">
         <div ref={mountRef} className="h-full w-full" />
+        {/* تغطية شعار يوتيوب قدر الإمكان + علامة المنصة */}
+        <div className="pointer-events-none absolute bottom-1 left-1 flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 text-[10px] font-bold text-paper">
+          <span className="h-2 w-2 rounded-full bg-signal" /> Vision Academy
+        </div>
         {watermark && (
           <div className={`pointer-events-none absolute z-10 select-none ${wmPos}`}>
             <span className="rounded-md bg-black/45 px-2 py-1 font-mono text-[11px] font-bold tracking-wider text-white/85">
@@ -513,7 +525,7 @@ function YouTubePlayer({ videoId, title, watermark, onProgress }) {
           -10
         </button>
         <button
-          onClick={() => skip(10)}
+          onClick={() => skip(10)
           aria-label="تقديم 10 ثواني"
           className="shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[11px] font-bold text-paper transition hover:text-signal"
         >
@@ -532,6 +544,9 @@ function YouTubePlayer({ videoId, title, watermark, onProgress }) {
           className="h-1 min-w-0 flex-1 cursor-pointer accent-signal"
           dir="ltr"
         />
+        <button onClick={toggleFullscreen} aria-label="ملء الشاشة" className="shrink-0 text-paper transition hover:text-signal">
+          <Icon name="fullscreen" className="h-5 w-5" />
+        </button>
       </div>
     </div>
   );
