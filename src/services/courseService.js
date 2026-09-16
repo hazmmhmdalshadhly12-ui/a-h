@@ -181,6 +181,16 @@ const ALLOWED_EXTENSIONS = [
   'txt', 'csv', 'mp3', 'wav', 'ogg'
 ];
 
+export function isSafeVideoUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:') return false;
+    if (/(youtube\.com|youtu\.be|youtube-nocookie\.com)$/.test(u.hostname) || u.hostname.endsWith('supabase.co')) return true;
+    return /\.(mp4|m4v|mov|webm|ogg|m3u8)(\?|#|$)/i.test(u.pathname);
+  } catch { return false; }
+}
+
 /** يرفع ملف لـ Storage ويرجع الـ public URL */
 export async function uploadCourseFile(file, { courseId, studentId }) {
   if (!file || !courseId) return { data: null, error: { message: 'بيانات ناقصة' } };
@@ -206,8 +216,11 @@ export async function uploadCourseFile(file, { courseId, studentId }) {
 export function courseFileDownloadUrl(file) {
   if (!file?.file_url) return '';
   const base = file.file_url;
-  // لو مش رابط سلة Supabase → ارجعه زي ما هو
-  if (!base.includes('/storage/v1/object/public/')) return base;
+  try {
+    const u = new URL(base);
+    if (u.protocol !== 'https:' || !u.hostname.endsWith('supabase.co')) return '';
+  } catch { return ''; }
+  if (!base.includes('/storage/v1/object/public/')) return '';
   const name = file.title || base.split('/').pop() || 'file';
   const sep = base.includes('?') ? '&' : '?';
   return `${base}${sep}download=${encodeURIComponent(name)}`;

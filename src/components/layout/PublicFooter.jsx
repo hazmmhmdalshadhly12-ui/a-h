@@ -16,6 +16,23 @@ const PLATFORM_ICONS = {
   email: 'mail'
 };
 
+function safeHref(platform, value) {
+  const v = String(value || '').trim();
+  if (/^https?:\/\//.test(v)) {
+    try {
+      const u = new URL(v);
+      if (u.protocol !== 'https:' && u.protocol !== 'http:') return '#';
+      return u.href;
+    } catch { return '#'; }
+  }
+  if (platform === 'phone') return `tel:${v.replace(/[^0-9+]/g, '')}`;
+  if (platform === 'whatsapp') return `https://wa.me/${v.replace(/\D/g, '')}`;
+  if (platform === 'email') {
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return EMAIL_RE.test(v) ? `mailto:${v}` : '#';
+  }
+  return '#';
+}
 function isUrl(v) {
   return /^https?:\/\//.test(v);
 }
@@ -62,9 +79,9 @@ export default function PublicFooter() {
               {contactLinks.map((link) => (
                 <li key={link.id || link.platform}>
                   <a
-                    href={isUrl(link.value) ? link.value : link.platform === 'phone' ? `tel:${link.value}` : `https://wa.me/${link.value.replace(/\D/g, '')}`}
+                    href={safeHref(link.platform, link.value)}
                     target={isUrl(link.value) ? '_blank' : undefined}
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 text-sm text-muted transition hover:text-stream"
                   >
                     <Icon name={PLATFORM_ICONS[link.platform] || 'contacts'} className="h-4 w-4" />
@@ -87,7 +104,7 @@ export default function PublicFooter() {
           <a
             href="https://wa.me/01208839442"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-xs text-muted transition hover:text-stream"
           >
             <Icon name="whatsapp" className="h-3.5 w-3.5" />

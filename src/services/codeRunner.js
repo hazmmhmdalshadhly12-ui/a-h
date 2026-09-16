@@ -53,6 +53,7 @@ function ensureWorker() {
   const blob = new Blob([WORKER_SRC], { type: 'application/javascript' });
   const url = URL.createObjectURL(blob);
   const w = new Worker(url);
+  URL.revokeObjectURL(url);
 
   w.onmessage = (e) => {
     const { id, ok, passed, output, error } = e.data || {};

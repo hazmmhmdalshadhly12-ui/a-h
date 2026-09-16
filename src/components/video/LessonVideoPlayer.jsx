@@ -573,7 +573,7 @@ export default function LessonVideoPlayer({ videoUrl, videoProvider, title, wate
   return (
     <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 bg-ink-900 p-6 text-center">
       <p className="text-sm text-muted">رابط الفيديو غير صالح</p>
-      <a href={videoUrl} target="_blank" rel="noreferrer" className="text-sm font-bold text-signal hover:text-signal-light">
+      <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-signal hover:text-signal-light">
         فتح الرابط
       </a>
     </div>
