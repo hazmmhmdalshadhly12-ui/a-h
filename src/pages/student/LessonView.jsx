@@ -49,23 +49,24 @@ export default function LessonView() {
   const lastSentRef = useRef(0);
   const handleProgress = useCallback(
     ({ current }) => {
+      if (!lessonId) return;
       const c = Math.floor(current);
       watchedRef.current = Math.max(watchedRef.current, c);
       if (c - lastSentRef.current >= 10) {
         lastSentRef.current = c;
-        if (activeLesson?.lesson_id) recordLessonProgress(activeLesson.lesson_id, watchedRef.current, c);
+        recordLessonProgress(lessonId, watchedRef.current, c);
       }
     },
-    [activeLesson]
+    [lessonId]
   );
 
   useEffect(() => {
-    if (activeLesson?.lesson_id) {
+    if (lessonId) {
       watchedRef.current = 0;
       lastSentRef.current = 0;
-      recordLessonOpen(activeLesson.lesson_id);
+      recordLessonOpen(lessonId);
     }
-  }, [activeLesson?.lesson_id]);
+  }, [lessonId]);
 
   useEffect(() => {
     if (!courseId) return;
