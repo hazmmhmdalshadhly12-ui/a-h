@@ -525,7 +525,7 @@ function YouTubePlayer({ videoId, title, watermark, onProgress }) {
           -10
         </button>
         <button
-          onClick={() => skip(10)
+          onClick={() => skip(10)}
           aria-label="تقديم 10 ثواني"
           className="shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[11px] font-bold text-paper transition hover:text-signal"
         >
