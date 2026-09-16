@@ -12,7 +12,6 @@ import Skeleton from '../../components/ui/Skeleton.jsx';
 import SubscriptionGate from '../../components/academy/SubscriptionGate.jsx';
 import { supabase } from '../../lib/supabaseClient.js';
 import { fetchCourseHomeworks, fetchCourseFiles, fetchCourseComments, addCourseComment, deleteCourseComment, uploadCourseFile, addCourseFile, deleteCourseFile, courseFileDownloadUrl } from '../../services/courseService.js';
-import { supabase } from '../../lib/supabaseClient.js';
 import { createBooking } from '../../services/bookingService.js';
 import { useToast } from '../../components/ui/Toast.jsx';
 import { GRADE_SHORT } from '../../config/site.js';
