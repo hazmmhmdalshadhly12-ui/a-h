@@ -103,7 +103,7 @@ function Watermark({ text, enabled, overlay }) {
 }
 
 // ---------- مشغّل الفيديو المباشر بتحكم كامل من المنصة ----------
-function DirectPlayer({ src, title, watermark }) {
+function DirectPlayer({ src, title, watermark, onProgress }) {
   const videoRef = useRef(null);
   const boxRef = useRef(null);
   const hlsRef = useRef(null);
@@ -208,7 +208,11 @@ function DirectPlayer({ src, title, watermark }) {
         onClick={toggle}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+        onTimeUpdate={(e) => {
+          const t = e.currentTarget.currentTime;
+          setTime(t);
+          if (onProgress && duration) onProgress({ current: t, duration: e.currentTarget.duration });
+        }}
         onLoadedMetadata={(e) => {
           setDuration(e.currentTarget.duration);
           e.currentTarget.volume = volume;
@@ -330,7 +334,7 @@ function DirectPlayer({ src, title, watermark }) {
 }
 
 // ---------- مشغّل يوتيوب بتحكم من المنصة ----------
-function YouTubePlayer({ videoId, title, watermark }) {
+function YouTubePlayer({ videoId, title, watermark, onProgress }) {
   const mountRef = useRef(null);
   const playerRef = useRef(null);
   const timerRef = useRef(null);
@@ -358,13 +362,15 @@ function YouTubePlayer({ videoId, title, watermark }) {
     const p = playerRef.current;
     if (!p || !p.getCurrentTime) return;
     try {
-      setTime(p.getCurrentTime());
+      const t = p.getCurrentTime();
       const d = p.getDuration();
+      setTime(t);
       if (d) setDuration(d);
+      if (onProgress && d) onProgress({ current: t, duration: d });
     } catch {
       /* تجاهل */
     }
-  }, []);
+  }, [onProgress]);
 
   const start = useCallback(async () => {
     setFailed(false);
@@ -540,14 +546,14 @@ function isDirectVideo(url, provider) {
 }
 
 /** المشغّل الرئيسي — يختار النوع تلقائياً من الرابط */
-export default function LessonVideoPlayer({ videoUrl, videoProvider, title, watermark }) {
+export default function LessonVideoPlayer({ videoUrl, videoProvider, title, watermark, onProgress }) {
   const ytId = extractYouTubeId(videoUrl);
   if (!videoUrl) return null;
   if (isDirectVideo(videoUrl, videoProvider)) {
-    return <DirectPlayer src={videoUrl} title={title} watermark={watermark} />;
+    return <DirectPlayer src={videoUrl} title={title} watermark={watermark} onProgress={onProgress} />;
   }
   if (ytId) {
-    return <YouTubePlayer videoId={ytId} title={title} watermark={watermark} />;
+    return <YouTubePlayer videoId={ytId} title={title} watermark={watermark} onProgress={onProgress} />;
   }
   return (
     <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 bg-ink-900 p-6 text-center">

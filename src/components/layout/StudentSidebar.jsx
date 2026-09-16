@@ -1,4 +1,3 @@
-// src/components/layout/StudentSidebar.jsx
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
 import { STUDENT_NAV } from '../../config/navigation.js';
@@ -10,6 +9,12 @@ import Badge from '../../components/ui/Badge.jsx';
 import { cn } from '../../lib/utils.js';
 import { supabase } from '../../lib/supabaseClient.js';
 import { useEffect, useState } from 'react';
+
+// Safe supabase wrapper
+const safeSupabase = supabase || {
+  rpc: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
+  from: () => ({ select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }) })
+};
 
 export default function StudentSidebar({ open, onClose }) {
   const { profile, signOut } = useAuth();
@@ -23,7 +28,7 @@ export default function StudentSidebar({ open, onClose }) {
       return;
     }
     setLoadingLessons(true);
-    supabase.rpc('get_course_lessons', { p_course_id: courseId })
+    safeSupabase.rpc('get_course_lessons', { p_course_id: courseId })
       .then(({ data }) => {
         setCourseLessons(data || []);
       })
@@ -50,7 +55,7 @@ export default function StudentSidebar({ open, onClose }) {
         <div className="flex-1 overflow-y-auto px-3 py-6">
           <SidebarNav items={[{ section: 'بوابة الطالب', items: STUDENT_NAV }]} onNavigate={onClose} />
 
-          {/* دروس الكورس الحالي */}
+          {/* دروس الكورس الحالي - تظهر فقط داخل الكورس/الدرس */}
           {courseId && courseLessons.length > 0 && (
             <div className="mt-6 border-t border-ink-700/60 pt-4">
               <div className="flex items-center justify-between mb-3 px-2">
