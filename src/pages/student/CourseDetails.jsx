@@ -55,8 +55,8 @@ export default function CourseDetails() {
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [subForm, setSubForm] = useState({ parent_phone: '', transfer_number: '' });
   const [submittingSub, setSubmittingSub] = useState(false);
-
-  useEffect(() => {
+  const [payMethods, setPayMethods] = useState([]);
+  useEffect(() => { fetchPaymentMethods().then(({ data }) => setPayMethods(data || [])); }, []);
     if (!courseId) return;
     setExtraLoading(true);
     Promise.all([
@@ -102,8 +102,6 @@ export default function CourseDetails() {
   const isMyGrade = profile?.grade === course.grade;
   const effectiveAccess = course?.accessible ?? false;
   const canWatch = Boolean(profile) && effectiveAccess && (isProfessional || isMyGrade);
-  const [payMethods, setPayMethods] = useState([]);
-  useEffect(() => { fetchPaymentMethods().then(({ data }) => setPayMethods(data || [])); }, []);
 
   // ===== التعليقات =====
   const submitComment = async (e) => {
