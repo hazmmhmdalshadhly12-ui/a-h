@@ -10,10 +10,10 @@ import Button from '../../components/ui/Button.jsx';
 import Skeleton from '../../components/ui/Skeleton.jsx';
 import EmptyState from '../../components/ui/EmptyState.jsx';
 import { useToast } from '../../components/ui/Toast.jsx';
-import { PAYMENT_INFO } from '../../config/constants.js';
 import { getFriendlyError } from '../../utils/errors.js';
 import { supabase } from '../../lib/supabaseClient.js';
 import { fetchStudentCourses } from '../../services/courseService.js';
+import { fetchPaymentMethods } from '../../services/paymentService.js';
 
 export default function Bookings() {
   const { profile } = useAuth();
@@ -34,7 +34,7 @@ export default function Bookings() {
 
   const selectedCourse = courses.find((c) => (c.course_id || c.id) === form.course_id);
   const amount = selectedCourse?.price ?? null;
-  const instagram = PAYMENT_INFO.instagramNumber;
+  const [payMethods, setPayMethods] = useState([]);
 
   useEffect(() => {
     if (!profile?.grade) return;
@@ -42,6 +42,7 @@ export default function Bookings() {
       setCourses(data || []);
       setCoursesLoading(false);
     });
+    fetchPaymentMethods().then(({ data }) => setPayMethods(data || []));
   }, [profile?.grade]);
 
   const courseOptions = courses.map((c) => ({
@@ -107,17 +108,16 @@ export default function Bookings() {
       <Card className="space-y-4">
         <h2 className="font-display text-lg font-bold">حجز كورس جديد</h2>
 
-        {selectedCourse && (
+        {selectedCourse && payMethods.length > 0 && (
           <div className="rounded-lens border border-signal/40 bg-signal/10 p-4">
             <h3 className="font-display text-base font-black text-paper">رسالة الدفع 💳</h3>
+            <p className="mt-1 text-sm text-paper/90">حوّل <b>{amount ? `${amount} جنيه` : 'المبلغ المحدد'}</b> لكورس <b>{selectedCourse.title}</b> على إحدى الطرق:</p>
             <ul className="mt-2 list-inside list-disc space-y-1.5 text-sm leading-relaxed text-paper/90">
-              <li>
-                حوّل <b>{amount ? `${amount} جنيه` : 'المبلغ المحدد'}</b> لكورس <b>{selectedCourse.title}</b>
-              </li>
-              <li>
-                على رقم الإنستجرام: <b dir="ltr" className="font-mono">{instagram}</b>
-              </li>
-              <li>محفظة كاش غير متوفر الآن — التحويل يكون من رقم مضمون بإسمك</li>
+              {payMethods.map((m) => (
+                <li key={m.id}>
+                  {m.name}: <b dir="ltr" className="font-mono">{m.details}</b>
+                </li>
+              ))}
             </ul>
           </div>
         )}

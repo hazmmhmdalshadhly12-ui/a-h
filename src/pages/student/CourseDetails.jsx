@@ -15,8 +15,8 @@ import { fetchCourseHomeworks, fetchCourseFiles, fetchCourseComments, addCourseC
 import { createBooking } from '../../services/bookingService.js';
 import { useToast } from '../../components/ui/Toast.jsx';
 import { GRADE_SHORT } from '../../config/site.js';
-import { PAYMENT_INFO } from '../../config/constants.js';
 import { getFriendlyError } from '../../utils/errors.js';
+import { fetchPaymentMethods } from '../../services/paymentService.js';
 import { cn } from '../../lib/utils.js';
 import { formatDateTime } from '../../utils/formatDate.js';
 
@@ -102,7 +102,8 @@ export default function CourseDetails() {
   const isMyGrade = profile?.grade === course.grade;
   const effectiveAccess = course?.accessible ?? false;
   const canWatch = Boolean(profile) && effectiveAccess && (isProfessional || isMyGrade);
-  const instagram = PAYMENT_INFO.instagramNumber;
+  const [payMethods, setPayMethods] = useState([]);
+  useEffect(() => { fetchPaymentMethods().then(({ data }) => setPayMethods(data || [])); }, []);
 
   // ===== التعليقات =====
   const submitComment = async (e) => {
@@ -224,9 +225,7 @@ export default function CourseDetails() {
               <div className="space-y-4 rounded-lens border border-signal/40 bg-signal/10 p-4">
                 <h3 className="font-display text-base font-black text-paper">خطوات الاشتراك 💳</h3>
                 <ul className="space-y-1.5 text-sm leading-relaxed text-paper/90">
-                  <li>حوّل <b>{course.price ?? '—'} جنيه</b> للكورس الاحترافي</li>
-                  <li>على رقم الإنستجرام: <b dir="ltr" className="font-mono">{instagram}</b></li>
-                  <li>محفظة كاش غير متوفر الآن — التحويل يكون من رقم مضمون بإسمك</li>
+                  {payMethods.length ? payMethods.map((m) => <li key={m.id}>{m.name}: <b dir="ltr" className="font-mono">{m.details}</b></li>) : <li>حوّل <b>{course.price ?? '—'} جنيه</b> — طرق الدفع ستظهر بعد إضافتها من الإعدادات</li>}
                 </ul>
                 <form onSubmit={submitSubscription} className="grid gap-3 sm:grid-cols-2">
                   <Input
