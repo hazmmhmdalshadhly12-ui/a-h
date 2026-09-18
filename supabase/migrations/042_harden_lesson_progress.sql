@@ -1,13 +1,21 @@
 -- 042_harden_lesson_progress.sql — تشديد تتبع الدروس
 -- منع التلاعب في watched_seconds وحقن course_id خاطئ
 
--- 1) تأكد أن course_id يطابق الدرس فعلاً
-alter table public.lesson_progress
-  drop constraint if exists lesson_progress_course_match;
-
-alter table public.lesson_progress
-  add constraint lesson_progress_course_match
-  check (course_id = (select course_id from public.lessons where id = lesson_id));
+-- 1) تأكد أن course_id يطابق الدرس فعلاً — عبر trigger بدل CHECK (CHECK لا يسمح بـ subquery)
+create or replace function public.lesson_progress_course_match()
+returns trigger
+language plpgsql as $$
+begin
+  if new.course_id != (select course_id from public.lessons where id = new.lesson_id) then
+    raise exception 'course_id لا يطابق الدرس';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists lesson_progress_course_match on public.lesson_progress;
+create trigger lesson_progress_course_match
+  before insert or update on public.lesson_progress
+  for each row execute function public.lesson_progress_course_match();
 
 -- 2) حدود watched_seconds (أقل من يوم، وأكبر من أو يساوي 0)
 alter table public.lesson_progress
