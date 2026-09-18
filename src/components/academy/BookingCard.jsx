@@ -20,7 +20,9 @@ export default function BookingCard({ booking }) {
           🔄 رقم التحويل: <span className="font-mono font-bold">{booking.transfer_number}</span>
         </p>
       )}
-      {isProfessional ? (
+      {booking.course_id ? (
+        <p className="text-sm font-semibold text-signal">📚 كورس: {booking.courses?.title || booking.course_id.slice(0, 8)}</p>
+      ) : isProfessional ? (
         <p className="text-sm font-semibold text-signal">⭐ {booking.notes || 'اشتراك في كورس احترافي'}</p>
       ) : (
         <p className="flex items-center gap-2 text-sm font-semibold text-paper">

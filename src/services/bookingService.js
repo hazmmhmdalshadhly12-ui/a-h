@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabaseClient.js';
 
 export async function fetchBookingsForStudent(studentId) {
   if (!studentId) return { data: [], error: null };
-  return supabase.from('bookings').select('*').eq('student_id', studentId).order('created_at', { ascending: false });
+  return supabase.from('bookings').select('*, courses(id,title)').eq('student_id', studentId).order('created_at', { ascending: false });
 }
 
 /** حجز شهري أو احترافي (course_id) — الاسم + موبايل الطالب + ولي الأمر + الصف + الشهر/الكورس */
@@ -27,7 +27,7 @@ export async function createBooking({ studentId, fullName, phone, parentPhone, g
 // ===== الأدمن =====
 
 export async function fetchAllBookings({ status } = {}) {
-  let q = supabase.from('bookings').select('*, profiles(id, full_name, phone, grade)').order('created_at', { ascending: false });
+  let q = supabase.from('bookings').select('*, profiles(id, full_name, phone, grade), courses(id,title)').order('created_at', { ascending: false });
   if (status) q = q.eq('status', status);
   return q;
 }
