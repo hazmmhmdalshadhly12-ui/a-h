@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useBookings } from '../../hooks/useBookings.js';
 import BookingCard from '../../components/academy/BookingCard.jsx';
@@ -8,39 +8,23 @@ import Select from '../../components/ui/Select.jsx';
 import Textarea from '../../components/ui/Textarea.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Skeleton from '../../components/ui/Skeleton.jsx';
-import EmptyState from '../../components/ui/EmptyState.jsx'
+import EmptyState from '../../components/ui/EmptyState.jsx';
 import { useToast } from '../../components/ui/Toast.jsx';
-import { GRADES_OPTIONS } from '../../config/constants.js';
 import { PAYMENT_INFO } from '../../config/constants.js';
-import { validatePhone } from '../../utils/validators.js';
 import { getFriendlyError } from '../../utils/errors.js';
 import { supabase } from '../../lib/supabaseClient.js';
-
-function currentMonth() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-// إرسال إيميل إشعار للمستر عند الحجز
-const sendBookingNotification = async (bookingData, studentData) => {
-  try {
-    const { error } = await supabase.functions.invoke('send-booking-email', {
-      body: { bookingData, studentData }
-    });
-    if (error) console.warn('Booking notification email failed:', error.message);
-  } catch (err) {
-    console.warn('Booking notification email failed:', err);
-  }
-};
+import { fetchStudentCourses } from '../../services/courseService.js';
 
 export default function Bookings() {
   const { profile } = useAuth();
   const { bookings, loading, reload, requestBooking } = useBookings();
   const toast = useToast();
-  const isProfessional = profile?.grade === 'professional';
+
+  const [courses, setCourses] = useState([]);
+  const [coursesLoading, setCoursesLoading] = useState(true);
 
   const [form, setForm] = useState({
-    month: currentMonth(),
+    course_id: '',
     notes: '',
     transfer_number: ''
   });
@@ -48,19 +32,31 @@ export default function Bookings() {
   const [submitting, setSubmitting] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
 
-  // المبلغ حسب الصف: أولى = 150، ثانية = 250 (الاحترافي بيشترك من جوه الكورس)
-  const amount = PAYMENT_INFO.amounts[profile?.grade] || PAYMENT_INFO.amounts.first_secondary;
+  const selectedCourse = courses.find((c) => (c.course_id || c.id) === form.course_id);
+  const amount = selectedCourse?.price ?? null;
   const instagram = PAYMENT_INFO.instagramNumber;
+
+  useEffect(() => {
+    if (!profile?.grade) return;
+    fetchStudentCourses(profile.grade).then(({ data }) => {
+      setCourses(data || []);
+      setCoursesLoading(false);
+    });
+  }, [profile?.grade]);
+
+  const courseOptions = courses.map((c) => ({
+    value: c.course_id || c.id,
+    label: `${c.title} ${c.price ? `— ${c.price} جنيه` : ''}`
+  }));
 
   const validate = () => {
     const errs = {};
-    if (!form.month) errs.month = 'اختر شهر الحجز';
+    if (!form.course_id) errs.course_id = 'اختر الكورس';
     if (!form.transfer_number.trim()) errs.transfer_number = 'اكتب الرقم اللي حولت منه';
     setErrors(errs);
     return !Object.values(errs).some(Boolean);
   };
 
-  // الخطوة 1: إرسال الحجز → الخطوة 2: رسالة الدفع
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
@@ -72,12 +68,12 @@ export default function Bookings() {
 
     setSubmitting(true);
     const { error } = await requestBooking({
-      // البيانات بتوخذ من البروفايل تلقائياً في الـ hook
       fullName: profile.full_name,
       phone: profile.phone,
       parentPhone: profile.parent_phone,
-      grade: profile.grade,
-      month: form.month,
+      grade: selectedCourse?.grade || profile.grade,
+      courseId: form.course_id,
+      month: null,
       notes: form.notes,
       transferNumber: form.transfer_number.trim()
     });
@@ -86,13 +82,18 @@ export default function Bookings() {
       toast.error(getFriendlyError(error, 'فشل الحجز'));
       return;
     }
-    // إرسال إيميل للمستر في الخلفية (مش محتاجين ننتظره)
-    sendBookingNotification(
-      { grade: profile.grade, month: form.month, notes: form.notes, transfer_number: form.transfer_number.trim() },
-      { full_name: profile.full_name, phone: profile.phone, parent_phone: profile.parent_phone }
-    );
-    toast.success('تم إتمام الطلب — قيد مراجعة المستر، وكمل الخطوات اللي جوة رسالة الدفع');
+    // إرسال إشعار للمستر
+    try {
+      await supabase.functions.invoke('send-booking-email', {
+        body: {
+          bookingData: { grade: selectedCourse?.grade || profile.grade, course_id: form.course_id, notes: form.notes, transfer_number: form.transfer_number.trim(), month: null },
+          studentData: { full_name: profile.full_name, phone: profile.phone, parent_phone: profile.parent_phone }
+        }
+      });
+    } catch {}
+    toast.success('تم إتمام الطلب — قيد مراجعة المستر');
     setShowPayment(false);
+    setForm({ course_id: '', notes: '', transfer_number: '' });
     reload();
   };
 
@@ -100,28 +101,45 @@ export default function Bookings() {
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-2xl font-black">الحجوزات</h1>
-        <p className="mt-1 text-sm text-muted">
-          {isProfessional
-            ? 'الكورس الاحترافي بيشترك من جوه صفحة الكورس — هنا بتشوف سجل حجوزاتك.'
-            : 'سجّل اشتراكك الشهري وانتظر تأكيد المستر — الحالة بتتحدث تلقائياً.'}
-        </p>
+        <p className="mt-1 text-sm text-muted">احجز كورساً محدداً وانتظر تأكيد المستر — كل كورس باشتراك منفصل.</p>
       </div>
 
-      {!isProfessional && (
-        <Card className="space-y-4">
-          <h2 className="font-display text-lg font-bold">حجز شهر جديد</h2>
+      <Card className="space-y-4">
+        <h2 className="font-display text-lg font-bold">حجز كورس جديد</h2>
 
-          {/* رقم التحويل أول حاجة — علشان الطالب يعرف يحول منين */}
+        {selectedCourse && (
           <div className="rounded-lens border border-signal/40 bg-signal/10 p-4">
             <h3 className="font-display text-base font-black text-paper">رسالة الدفع 💳</h3>
             <ul className="mt-2 list-inside list-disc space-y-1.5 text-sm leading-relaxed text-paper/90">
-              <li>حوّل <b>{amount} جنيه</b> {profile?.grade === 'second_secondary' ? 'للصف الثاني الثانوي' : 'للصف الأول الثانوي'}</li>
-              <li>على رقم الإنستجرام: <b dir="ltr" className="font-mono">{instagram}</b></li>
+              <li>
+                حوّل <b>{amount ? `${amount} جنيه` : 'المبلغ المحدد'}</b> لكورس <b>{selectedCourse.title}</b>
+              </li>
+              <li>
+                على رقم الإنستجرام: <b dir="ltr" className="font-mono">{instagram}</b>
+              </li>
               <li>محفظة كاش غير متوفر الآن — التحويل يكون من رقم مضمون بإسمك</li>
             </ul>
           </div>
+        )}
 
+        {coursesLoading ? (
+          <Skeleton className="h-20" />
+        ) : courseOptions.length === 0 ? (
+          <p className="text-sm text-muted">لا توجد كورسات متاحة لصفك حالياً</p>
+        ) : (
           <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Select
+                name="course_id"
+                label="اختر الكورس *"
+                value={form.course_id}
+                onChange={(e) => setForm({ ...form, course_id: e.target.value })}
+                options={courseOptions}
+                placeholder="— اختر كورس —"
+                error={errors.course_id}
+                required
+              />
+            </div>
             <div className="sm:col-span-2">
               <Input
                 name="transfer_number"
@@ -134,37 +152,28 @@ export default function Bookings() {
                 required
               />
             </div>
-            <Input
-              name="month"
-              label="شهر الحجز *"
-              type="month"
-              value={form.month}
-              onChange={(e) => setForm({ ...form, month: e.target.value })}
-              error={errors.month}
-              required
-            />
-            <Textarea
-              name="notes"
-              label="ملاحظات (اختياري)"
-              rows={2}
-              placeholder="مثال: مفضل الحضور يوم السبت"
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            />
+            <div className="sm:col-span-2">
+              <Textarea
+                name="notes"
+                label="ملاحظات (اختياري)"
+                rows={2}
+                placeholder="مثال: مفضل الحضور يوم السبت"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              />
+            </div>
             <div className="sm:col-span-2">
               <Button type="submit" loading={submitting}>
-                {showPayment ? 'إتمام الطلب' : 'إرسال طلب الحجز'}
+                {showPayment ? 'إتمام الطلب' : 'عرض بيانات الدفع'}
               </Button>
             </div>
           </form>
+        )}
 
-          {showPayment && (
-            <p className="text-xs text-muted">
-              بعد التحويل اضغط "إتمام الطلب" وانتظر المستر يؤكد اشتراكك — هتفضل الكورسات والامتحانات مقفولة لحد التأكيد.
-            </p>
-          )}
-        </Card>
-      )}
+        {showPayment && (
+          <p className="text-xs text-muted">بعد التحويل اضغط "إتمام الطلب" وانتظر المستر يؤكد اشتراكك.</p>
+        )}
+      </Card>
 
       <div>
         <h2 className="mb-3 font-display text-lg font-bold">حجوزاتي</h2>
