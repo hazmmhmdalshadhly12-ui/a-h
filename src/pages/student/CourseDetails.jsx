@@ -57,6 +57,7 @@ export default function CourseDetails() {
   const [submittingSub, setSubmittingSub] = useState(false);
   const [payMethods, setPayMethods] = useState([]);
   useEffect(() => { fetchPaymentMethods().then(({ data }) => setPayMethods(data || [])); }, []);
+  useEffect(() => {
     if (!courseId) return;
     setExtraLoading(true);
     Promise.all([
