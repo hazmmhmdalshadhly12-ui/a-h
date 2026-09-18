@@ -29,6 +29,7 @@ import CodePlayground from '../pages/student/CodePlayground.jsx';
 import Profile from '../pages/student/Profile.jsx';
 import StudentChat from '../pages/student/Chat.jsx';
 import LessonView from '../pages/student/LessonView.jsx';
+import Checkout from '../pages/student/Checkout.jsx';
 
 import ParentLayout from '../pages/parent/ParentLayout.jsx';
 import ParentDashboard from '../pages/parent/Dashboard.jsx';
@@ -88,6 +89,7 @@ export default function AppRoutes() {
         <Route path="courses" element={<MyCourses />} />
         <Route path="courses/:courseId" element={<CourseDetails />} />
         <Route path="courses/:courseId/lesson/:lessonId" element={<LessonView />} />
+        <Route path="checkout/:courseId" element={<Checkout />} />
         <Route path="courses/:courseId/homework/:homeworkId" element={<HomeworkTake />} />
         <Route path="exams" element={<Exams />} />
         <Route path="exams/:examId" element={<TakeExam />} />

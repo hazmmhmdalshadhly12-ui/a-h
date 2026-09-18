@@ -45,7 +45,10 @@ export default function Bookings() {
     fetchPaymentMethods().then(({ data }) => setPayMethods(data || []));
   }, [profile?.grade]);
 
-  const courseOptions = courses.map((c) => ({
+  const bookedIds = new Set(bookings.filter((b) => b.status !== 'rejected' && b.course_id).map((b) => b.course_id));
+  const availableCourses = courses.filter((c) => !bookedIds.has(c.course_id || c.id));
+  const bookedCourses = courses.filter((c) => bookedIds.has(c.course_id || c.id));
+  const courseOptions = availableCourses.map((c) => ({
     value: c.course_id || c.id,
     label: `${c.title} ${c.price ? `— ${c.price} جنيه` : ''}`
   }));
@@ -107,6 +110,16 @@ export default function Bookings() {
 
       <Card className="space-y-4">
         <h2 className="font-display text-lg font-bold">حجز كورس جديد</h2>
+        {bookedCourses.length > 0 && (
+          <div className="rounded-lens border border-success/30 bg-success/10 p-3">
+            <p className="text-sm font-bold text-success">✓ كورسات مشترك فيها:</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {bookedCourses.map((c) => (
+                <span key={c.course_id || c.id} className="inline-flex items-center gap-1 rounded-full bg-success/15 px-3 py-1 text-xs font-bold text-success">✓ {c.title}</span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {selectedCourse && payMethods.length > 0 && (
           <div className="rounded-lens border border-signal/40 bg-signal/10 p-4">
@@ -124,8 +137,10 @@ export default function Bookings() {
 
         {coursesLoading ? (
           <Skeleton className="h-20" />
-        ) : courseOptions.length === 0 ? (
+        ) : availableCourses.length === 0 && bookedCourses.length === 0 ? (
           <p className="text-sm text-muted">لا توجد كورسات متاحة لصفك حالياً</p>
+        ) : availableCourses.length === 0 ? (
+          <p className="text-sm text-success">✓ أنت مشترك في كل الكورسات المتاحة</p>
         ) : (
           <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
