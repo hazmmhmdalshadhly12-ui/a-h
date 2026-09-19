@@ -36,10 +36,12 @@ on conflict do nothing;
 drop policy if exists "courses: read accessible or admin" on public.courses;
 drop policy if exists "courses: student read own grade or published professional" on public.courses;
 drop policy if exists "courses: read own grade or admin" on public.courses;
+drop policy if exists "courses: read published own grade" on public.courses;
+drop policy if exists "courses: admin all" on public.courses;
 
 create policy "courses: read published own grade"
   on public.courses for select to authenticated
-  using (public.is_admin() or (coalesce(is_published,true)=true and (grade = (select grade from public.profiles where id=auth.uid()) or grade='professional')));
+  using (public.is_admin() or (coalesce(is_published,true)=true and (grade = (select p.grade from public.profiles p where p.id=auth.uid()) or grade='professional')));
 
 create policy "courses: admin all"
   on public.courses for all to authenticated using (public.is_admin()) with check (public.is_admin());
@@ -51,8 +53,8 @@ language plpgsql stable security definer set search_path = public as $$
 declare v_grade text; v_uid uuid:=auth.uid();
 begin
   if v_uid is null then raise exception 'يجب تسجيل الدخول'; end if;
-  if public.is_admin() then v_grade:=coalesce(nullif(p_grade,''), (select grade from public.profiles where id=v_uid));
-  else select grade into v_grade from public.profiles where id=v_uid; if v_grade is null then raise exception 'البروفايل غير موجود'; end if; end if;
+  if public.is_admin() then v_grade:=coalesce(nullif(p_grade,''), (select p.grade from public.profiles p where p.id=v_uid));
+  else select p.grade into v_grade from public.profiles p where p.id=v_uid; if v_grade is null then raise exception 'البروفايل غير موجود'; end if; end if;
   return query select c.id, c.title, c.description, c.grade,
     case when public.can_access_course(c.id) then c.video_url else null end, c.image_url, c.price, c.section_id, s.title, c.order_index, c.created_at,
     public.can_access_course(c.id)
