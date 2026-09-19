@@ -200,8 +200,8 @@ export default function CourseDetails() {
           </Link>
         </div>
 
-        {/* ===== الكورس الاحترافي غير مشترك: عرض السعر + الاشتراك ===== */}
-        {isProfessional && !canWatch && !effectiveAccess ? (
+        {/* ===== حاجز الدفع: لو مش مشترك اعرض الاشتراك فقط (يمنع ثغرة الرجوع) ===== */}
+        {!effectiveAccess ? (
           <Card className="space-y-4 p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>

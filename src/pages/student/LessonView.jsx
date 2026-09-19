@@ -133,7 +133,7 @@ export default function LessonView() {
 
   const activeLesson = lessons.find((l) => l.lesson_id === lessonId);
   const isLessonAccessible = activeLesson?.accessible === true || activeLesson?.is_free === true;
-  const rawVideoUrl = activeLesson?.video_url || course.video_url;
+  const rawVideoUrl = isLessonAccessible ? activeLesson?.video_url : null;
   const instagram = PAYMENT_INFO.instagramNumber;
   const gradeLabel = GRADE_SHORT[course.grade] || course.grade;
 
