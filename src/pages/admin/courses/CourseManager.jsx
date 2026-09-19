@@ -234,7 +234,8 @@ function CourseManager() {
         ) : (
           <div className="space-y-2" role="list" aria-label="قائمة الدروس">
             {lessons.map((lesson, index) => (
-              <Card key={lesson.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 relative" role="listitem">
+              <div key={lesson.id} className="space-y-2">
+                <Card className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 relative" role="listitem">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <button
                     onMouseDown={() => false}
@@ -268,24 +269,24 @@ function CourseManager() {
                   </Button>
                 </div>
               </Card>
-              {expandedLesson === lesson.id && (
-                <Card className="mt-2 space-y-4 border-dashed bg-ink-900/40 p-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <p className="text-sm font-bold text-paper">إضافة واجب للدرس</p>
-                      <Input placeholder="عنوان الواجب" value={hwTitle} onChange={(e) => setHwTitle(e.target.value)} />
-                      <Button size="sm" loading={hwUploading} onClick={() => handleAddHomework(lesson.id)}>إضافة الواجب</Button>
+                {expandedLesson === lesson.id && (
+                  <Card className="space-y-4 border-dashed bg-ink-900/40 p-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <p className="text-sm font-bold text-paper">إضافة واجب للدرس</p>
+                        <Input placeholder="عنوان الواجب" value={hwTitle} onChange={(e) => setHwTitle(e.target.value)} />
+                        <Button size="sm" loading={hwUploading} onClick={() => handleAddHomework(lesson.id)}>إضافة الواجب</Button>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-sm font-bold text-paper">رفع ملف إضافي</p>
+                        <Input placeholder="عنوان الملف" value={lessonFileTitle} onChange={(e) => setLessonFileTitle(e.target.value)} />
+                        <input type="file" onChange={(e) => setLessonFile(e.target.files?.[0] || null)} className="block w-full text-sm text-muted file:mr-2 file:rounded-lens file:border-0 file:bg-signal file:px-3 file:py-1 file:text-ink" />
+                        <Button size="sm" loading={fileUploading} onClick={() => handleLessonFileUpload(lesson.id)}>رفع الملف</Button>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <p className="text-sm font-bold text-paper">رفع ملف إضافي</p>
-                      <Input placeholder="عنوان الملف" value={lessonFileTitle} onChange={(e) => setLessonFileTitle(e.target.value)} />
-                      <input type="file" onChange={(e) => setLessonFile(e.target.files?.[0] || null)} className="block w-full text-sm text-muted file:mr-2 file:rounded-lens file:border-0 file:bg-signal file:px-3 file:py-1 file:text-ink" />
-                      <Button size="sm" loading={fileUploading} onClick={() => handleLessonFileUpload(lesson.id)}>رفع الملف</Button>
-                    </div>
-                  </div>
-                </Card>
-              )}
-            </>
+                  </Card>
+                )}
+              </div>
             ))}
           </div>
         )}
