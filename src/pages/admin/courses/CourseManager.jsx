@@ -52,6 +52,12 @@ function CourseManager() {
   });
   const [editingLessonId, setEditingLessonId] = useState(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [expandedLesson, setExpandedLesson] = useState(null);
+  const [hwTitle, setHwTitle] = useState('');
+  const [hwUploading, setHwUploading] = useState(false);
+  const [lessonFile, setLessonFile] = useState(null);
+  const [lessonFileTitle, setLessonFileTitle] = useState('');
+  const [fileUploading, setFileUploading] = useState(false);
 
   const handleVideoUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -125,6 +131,34 @@ function CourseManager() {
     if (error) return toast.error(error.message || 'فشل الحذف');
     toast.success('تم حذف الدرس');
     loadLessons();
+  };
+
+  const handleAddHomework = async (lessonId) => {
+    if (!hwTitle.trim()) return toast.error('اكتب عنوان الواجب');
+    setHwUploading(true);
+    const { error } = await supabase.from('homeworks').insert({ course_id: courseId, lesson_id: lessonId, title: hwTitle.trim() });
+    setHwUploading(false);
+    if (error) return toast.error(error.message);
+    toast.success('تم إضافة الواجب');
+    setHwTitle('');
+    setExpandedLesson(null);
+  };
+
+  const handleLessonFileUpload = async (lessonId) => {
+    if (!lessonFile || !lessonFileTitle.trim()) return toast.error('اختر ملف واكتب عنوانه');
+    setFileUploading(true);
+    const ext = lessonFile.name.split('.').pop();
+    const path = `${courseId}/${lessonId}/${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from('course-files').upload(path, lessonFile);
+    if (upErr) { setFileUploading(false); return toast.error(upErr.message); }
+    const { data } = supabase.storage.from('course-files').getPublicUrl(path);
+    const { error } = await supabase.from('course_files').insert({ course_id: courseId, lesson_id: lessonId, title: lessonFileTitle.trim(), file_url: data.publicUrl, file_type: ext });
+    setFileUploading(false);
+    if (error) return toast.error(error.message);
+    toast.success('تم رفع الملف');
+    setLessonFile(null);
+    setLessonFileTitle('');
+    setExpandedLesson(null);
   };
 
   const resetLessonForm = () => {
@@ -223,6 +257,9 @@ function CourseManager() {
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setExpandedLesson(expandedLesson === lesson.id ? null : lesson.id)}>
+                    <Icon name="layers" className="h-4 w-4" /> ملف/واجب
+                  </Button>
                   <Button variant="outline" size="sm" onClick={() => editLesson(lesson)}>
                     <Icon name="edit" className="h-4 w-4" /> تعديل
                   </Button>
@@ -231,6 +268,24 @@ function CourseManager() {
                   </Button>
                 </div>
               </Card>
+              {expandedLesson === lesson.id && (
+                <Card className="mt-2 space-y-4 border-dashed bg-ink-900/40 p-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-sm font-bold text-paper">إضافة واجب للدرس</p>
+                      <Input placeholder="عنوان الواجب" value={hwTitle} onChange={(e) => setHwTitle(e.target.value)} />
+                      <Button size="sm" loading={hwUploading} onClick={() => handleAddHomework(lesson.id)}>إضافة الواجب</Button>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-bold text-paper">رفع ملف إضافي</p>
+                      <Input placeholder="عنوان الملف" value={lessonFileTitle} onChange={(e) => setLessonFileTitle(e.target.value)} />
+                      <input type="file" onChange={(e) => setLessonFile(e.target.files?.[0] || null)} className="block w-full text-sm text-muted file:mr-2 file:rounded-lens file:border-0 file:bg-signal file:px-3 file:py-1 file:text-ink" />
+                      <Button size="sm" loading={fileUploading} onClick={() => handleLessonFileUpload(lesson.id)}>رفع الملف</Button>
+                    </div>
+                  </div>
+                </Card>
+              )}
+            </>
             ))}
           </div>
         )}

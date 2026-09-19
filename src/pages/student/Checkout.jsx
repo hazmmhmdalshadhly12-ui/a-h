@@ -14,6 +14,7 @@ import { fetchPaymentMethods } from '../../services/paymentService.js';
 import { createBooking } from '../../services/bookingService.js';
 import { getFriendlyError } from '../../utils/errors.js';
 import { GRADE_SHORT } from '../../config/site.js';
+import { supabase } from '../../lib/supabaseClient.js';
 
 export default function Checkout() {
   const { courseId } = useParams();
@@ -23,6 +24,7 @@ export default function Checkout() {
   const toast = useToast();
   const [methods, setMethods] = useState([]);
   const [form, setForm] = useState({ transfer_number: '', notes: '' });
+  const [proofFile, setProofFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -36,7 +38,17 @@ export default function Checkout() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.transfer_number.trim()) return toast.error('اكتب رقم التحويل');
+    if (!proofFile) return toast.error('ارفع صورة إثبات التحويل — إجباري');
     setSubmitting(true);
+    let proofUrl = null;
+    if (proofFile) {
+      const ext = proofFile.name.split('.').pop() || 'jpg';
+      const path = `proofs/${profile.id}/${courseId}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('course-files').upload(path, proofFile, { cacheControl: '3600' });
+      if (upErr) { setSubmitting(false); return toast.error('فشل رفع صورة التحويل'); }
+      const { data } = supabase.storage.from('course-files').getPublicUrl(path);
+      proofUrl = data.publicUrl;
+    }
     const { error } = await createBooking({
       studentId: profile.id,
       courseId,
@@ -44,7 +56,7 @@ export default function Checkout() {
       phone: profile.phone,
       parentPhone: profile.parent_phone,
       grade: course.grade,
-      notes: form.notes,
+      notes: proofUrl ? `${form.notes}\n[proof:${proofUrl}]` : form.notes,
       transferNumber: form.transfer_number.trim()
     });
     setSubmitting(false);
@@ -96,6 +108,11 @@ export default function Checkout() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input name="transfer_number" label="رقم التحويل / العملية *" placeholder="01xxxxxxxxx" value={form.transfer_number} onChange={(e) => setForm({ ...form, transfer_number: e.target.value })} required />
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-paper">صورة إثبات التحويل *</label>
+            <input type="file" accept="image/*" onChange={(e) => setProofFile(e.target.files?.[0] || null)} className="block w-full rounded-lens border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-paper file:mr-3 file:rounded-lens file:border-0 file:bg-signal file:px-3 file:py-1.5 file:text-ink file:font-bold" required />
+            <p className="mt-1 text-xs text-muted">صورة واضحة للإيصال — إجباري. لن يتم قبول الحجز بدونها.</p>
+          </div>
           <Textarea name="notes" label="ملاحظات (اختياري)" placeholder="مثال: حولت الساعة 8 م" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />
           <div className="rounded-lens bg-ink-800 p-3 text-xs leading-5 text-muted">الاسم: {profile.full_name} • الموبايل: {profile.phone} • ولي الأمر: {profile.parent_phone || '—'} — تُرسل تلقائياً من بروفايلك.</div>
           <Button type="submit" loading={submitting} className="w-full" size="lg">إرسال طلب الاشتراك</Button>
