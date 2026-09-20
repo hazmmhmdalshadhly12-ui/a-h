@@ -54,6 +54,8 @@ function CourseManager() {
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [expandedLesson, setExpandedLesson] = useState(null);
   const [hwTitle, setHwTitle] = useState('');
+  const [hwMode, setHwMode] = useState('electronic'); // electronic | file
+  const [hwFile, setHwFile] = useState(null);
   const [hwUploading, setHwUploading] = useState(false);
   const [lessonFile, setLessonFile] = useState(null);
   const [lessonFileTitle, setLessonFileTitle] = useState('');
@@ -136,12 +138,29 @@ function CourseManager() {
   const handleAddHomework = async (lessonId) => {
     if (!hwTitle.trim()) return toast.error('اكتب عنوان الواجب');
     setHwUploading(true);
-    const { error } = await supabase.from('homeworks').insert({ course_id: courseId, lesson_id: lessonId, title: hwTitle.trim() });
+    if (hwMode === 'file') {
+      if (!hwFile) { setHwUploading(false); return toast.error('اختر ملف الواجب'); }
+      const ext = hwFile.name.split('.').pop();
+      const path = `${courseId}/${lessonId}/hw-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('course-files').upload(path, hwFile);
+      if (upErr) { setHwUploading(false); return toast.error(upErr.message); }
+      const { data } = supabase.storage.from('course-files').getPublicUrl(path);
+      const { data: userData } = await supabase.auth.getUser();
+      const { error } = await supabase.from('homeworks').insert({ course_id: courseId, lesson_id: lessonId, title: hwTitle.trim(), description: data.publicUrl });
+      setHwUploading(false);
+      if (error) return toast.error(error.message);
+      toast.success('تم إضافة الواجب كملف');
+      setHwTitle('');
+      setHwFile(null);
+      setExpandedLesson(null);
+      return;
+    }
+    const { data, error } = await supabase.from('homeworks').insert({ course_id: courseId, lesson_id: lessonId, title: hwTitle.trim() }).select().single();
     setHwUploading(false);
     if (error) return toast.error(error.message);
-    toast.success('تم إضافة الواجب');
+    toast.success('تم إضافة الواجب — الآن أضف الأسئلة');
     setHwTitle('');
-    setExpandedLesson(null);
+    // افتح صفحة إدارة أسئلة الواجب (لو موجودة) أو ابقَ للتعديل
   };
 
   const handleLessonFileUpload = async (lessonId) => {
@@ -272,19 +291,25 @@ function CourseManager() {
               </Card>
                 {expandedLesson === lesson.id && (
                   <Card className="space-y-4 border-dashed bg-ink-900/40 p-4">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <p className="text-sm font-bold text-paper">إضافة واجب للدرس</p>
-                        <Input placeholder="عنوان الواجب" value={hwTitle} onChange={(e) => setHwTitle(e.target.value)} />
-                        <Button size="sm" loading={hwUploading} onClick={() => handleAddHomework(lesson.id)}>إضافة الواجب</Button>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-sm font-bold text-paper">إضافة واجب للدرس</p>
+                      <div className="flex gap-2 text-xs">
+                        <button onClick={() => setHwMode('electronic')} className={`rounded-full px-3 py-1 font-bold ${hwMode==='electronic'?'bg-signal text-ink':'bg-ink-700 text-muted'}`}>إلكتروني</button>
+                        <button onClick={() => setHwMode('file')} className={`rounded-full px-3 py-1 font-bold ${hwMode==='file'?'bg-signal text-ink':'bg-ink-700 text-muted'}`}>ملف</button>
                       </div>
-                      <div className="space-y-2">
-                        <p className="text-sm font-bold text-paper">رفع ملف إضافي</p>
-                        <Input placeholder="عنوان الملف" value={lessonFileTitle} onChange={(e) => setLessonFileTitle(e.target.value)} />
-                        <input type="file" onChange={(e) => setLessonFile(e.target.files?.[0] || null)} className="block w-full text-sm text-muted file:mr-2 file:rounded-lens file:border-0 file:bg-signal file:px-3 file:py-1 file:text-ink" />
-                        <Button size="sm" loading={fileUploading} onClick={() => handleLessonFileUpload(lesson.id)}>رفع الملف</Button>
-                      </div>
+                      <Input placeholder="عنوان الواجب" value={hwTitle} onChange={(e) => setHwTitle(e.target.value)} />
+                      {hwMode==='file' && <input type="file" onChange={(e) => setHwFile(e.target.files?.[0] || null)} className="block w-full text-sm text-muted file:mr-2 file:rounded-lens file:border-0 file:bg-signal file:px-3 file:py-1 file:text-ink" />}
+                      <Button size="sm" loading={hwUploading} onClick={() => handleAddHomework(lesson.id)}>إضافة الواجب {hwMode==='file' ? 'كملف' : 'إلكتروني'}</Button>
+                      {hwMode==='electronic' && <p className="text-xs text-muted">بعد الإضافة → أضف الأسئلة من صفحة الواجبات</p>}
                     </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-bold text-paper">رفع ملف إضافي</p>
+                      <Input placeholder="عنوان الملف" value={lessonFileTitle} onChange={(e) => setLessonFileTitle(e.target.value)} />
+                      <input type="file" onChange={(e) => setLessonFile(e.target.files?.[0] || null)} className="block w-full text-sm text-muted file:mr-2 file:rounded-lens file:border-0 file:bg-signal file:px-3 file:py-1 file:text-ink" />
+                      <Button size="sm" loading={fileUploading} onClick={() => handleLessonFileUpload(lesson.id)}>رفع الملف</Button>
+                    </div>
+                  </div>
                   </Card>
                 )}
               </div>
