@@ -126,15 +126,17 @@ export default function Dashboard() {
           <Skeleton className="h-14" />
         ) : lastBooking ? (
           <div className="space-y-2">
-            {lastBooking.grade === 'professional' ? (
-              <p className="text-sm font-semibold text-paper">⭐ {lastBooking.notes || 'اشتراك في كورس احترافي'}</p>
+            {lastBooking.course_id ? (
+              <p className="text-sm font-semibold text-signal">📚 {lastBooking.courses?.title || 'كورس'}</p>
+            ) : lastBooking.grade === 'professional' ? (
+              <p className="text-sm font-semibold text-paper">⭐ {(lastBooking.notes || '').replace(/\[proof:.*?\]/g, '').trim() || 'اشتراك في كورس احترافي'}</p>
             ) : (
               <p className="text-sm font-semibold text-paper">📅 حجز شهر: {formatMonth(lastBooking.month)}</p>
             )}
             <Badge color={BOOKING_STATUSES[lastBooking.status]?.color || 'muted'}>
               {lastBookingStatus}
             </Badge>
-            {lastBooking.notes && <p className="text-sm text-muted">{lastBooking.notes}</p>}
+            {lastBooking.notes && lastBooking.notes.replace(/\[proof:.*?\]/g, '').trim() && <p className="text-sm text-muted">{lastBooking.notes.replace(/\[proof:.*?\]/g, '').trim()}</p>}
           </div>
         ) : (
           <div className="flex flex-col items-start gap-3 py-4">
