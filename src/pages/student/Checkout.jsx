@@ -56,8 +56,9 @@ export default function Checkout() {
       phone: profile.phone,
       parentPhone: profile.parent_phone,
       grade: course.grade,
-      notes: proofUrl ? `${form.notes}\n[proof:${proofUrl}]` : form.notes,
-      transferNumber: form.transfer_number.trim()
+      notes: form.notes,
+      transferNumber: form.transfer_number.trim(),
+      transferProofUrl: proofUrl
     });
     setSubmitting(false);
     if (error) return toast.error(getFriendlyError(error, 'فشل إرسال الطلب'));

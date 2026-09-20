@@ -152,7 +152,8 @@ function CourseManager() {
     const { error: upErr } = await supabase.storage.from('course-files').upload(path, lessonFile);
     if (upErr) { setFileUploading(false); return toast.error(upErr.message); }
     const { data } = supabase.storage.from('course-files').getPublicUrl(path);
-    const { error } = await supabase.from('course_files').insert({ course_id: courseId, lesson_id: lessonId, title: lessonFileTitle.trim(), file_url: data.publicUrl, file_type: ext });
+    const { data: userData } = await supabase.auth.getUser();
+    const { error } = await supabase.from('course_files').insert({ course_id: courseId, lesson_id: lessonId, title: lessonFileTitle.trim(), file_url: data.publicUrl, file_type: ext, uploaded_by: userData?.user?.id });
     setFileUploading(false);
     if (error) return toast.error(error.message);
     toast.success('تم رفع الملف');
