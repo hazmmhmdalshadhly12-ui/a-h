@@ -221,6 +221,25 @@ export default function LessonView() {
     );
   }
 
+  // ثغرة الرابط المباشر: لو الدرس مقفول لا تعرض أي محتوى — حوله لصفحة الدفع
+  if (!extraLoading && activeLesson && !isLessonAccessible) {
+    return (
+      <Card className="flex flex-col items-center gap-4 py-14 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-warning/15 text-warning">
+          <Icon name="lock" className="h-8 w-8" />
+        </div>
+        <div>
+          <h2 className="font-display text-xl font-black">هذا الدرس للمشتركين فقط</h2>
+          <p className="mt-1 max-w-md text-sm text-muted">اشترك في الكورس <b className="text-paper">{course.title}</b> لفتح جميع الدروس.</p>
+        </div>
+        <div className="flex gap-2">
+          <Link to={`/student/checkout/${courseId}`}><Button><Icon name="lock" className="h-4 w-4" /> ادفع الآن — {course.price ? `${course.price} جنيه` : 'اشترك'}</Button></Link>
+          <Link to={`/student/courses/${courseId}`}><Button variant="secondary">رجوع للكورس</Button></Link>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
