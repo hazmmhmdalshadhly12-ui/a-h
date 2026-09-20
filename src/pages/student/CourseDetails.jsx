@@ -56,6 +56,7 @@ export default function CourseDetails() {
   const [subForm, setSubForm] = useState({ parent_phone: '', transfer_number: '' });
   const [submittingSub, setSubmittingSub] = useState(false);
   const [payMethods, setPayMethods] = useState([]);
+  const [viewerFile, setViewerFile] = useState(null);
   useEffect(() => { fetchPaymentMethods().then(({ data }) => setPayMethods(data || [])); }, []);
   useEffect(() => {
     if (!courseId) return;
@@ -150,7 +151,6 @@ export default function CourseDetails() {
     setFiles(data || []);
   };
 
-  const [viewerFile, setViewerFile] = useState(null);
   const removeFile = async (fileId) => {
     if (!window.confirm('حذف هذا الملف؟')) return;
     const { error } = await deleteCourseFile(fileId);
