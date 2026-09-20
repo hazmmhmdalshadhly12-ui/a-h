@@ -11,7 +11,7 @@ import Textarea from '../../components/ui/Textarea.jsx';
 import Skeleton from '../../components/ui/Skeleton.jsx';
 import SubscriptionGate from '../../components/academy/SubscriptionGate.jsx';
 import { supabase } from '../../lib/supabaseClient.js';
-import { fetchCourseHomeworks, fetchCourseFiles, fetchCourseComments, addCourseComment, deleteCourseComment, uploadCourseFile, addCourseFile, deleteCourseFile, courseFileDownloadUrl } from '../../services/courseService.js';
+import { fetchCourseHomeworks, fetchCourseFiles, fetchCourseComments, addCourseComment, deleteCourseComment, uploadCourseFile, addCourseFile, deleteCourseFile } from '../../services/courseService.js';
 import { createBooking } from '../../services/bookingService.js';
 import { useToast } from '../../components/ui/Toast.jsx';
 import { GRADE_SHORT } from '../../config/site.js';
@@ -150,6 +150,7 @@ export default function CourseDetails() {
     setFiles(data || []);
   };
 
+  const [viewerFile, setViewerFile] = useState(null);
   const removeFile = async (fileId) => {
     if (!window.confirm('حذف هذا الملف؟')) return;
     const { error } = await deleteCourseFile(fileId);
@@ -376,11 +377,9 @@ export default function CourseDetails() {
                             </p>
                           </div>
                           <div className="flex shrink-0 items-center gap-1.5">
-                            <a href={courseFileDownloadUrl(f)} target="_blank" rel="noopener noreferrer" download>
-                              <Button size="sm" variant="secondary">
-                                <Icon name="download" className="h-3.5 w-3.5" /> تحميل
-                              </Button>
-                            </a>
+                            <Button size="sm" variant="secondary" onClick={() => setViewerFile(f)}>
+                              <Icon name="eye" className="h-3.5 w-3.5" /> عرض
+                            </Button>
                             {mine && (
                               <Button size="sm" variant="danger" onClick={() => removeFile(f.file_id)}>
                                 <Icon name="trash" className="h-3.5 w-3.5" />
@@ -393,6 +392,21 @@ export default function CourseDetails() {
                   </ul>
                 )}
               </Card>
+              {viewerFile && (
+                <Card className="overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-ink-700 px-4 py-3">
+                    <p className="font-semibold text-paper">{viewerFile.title}</p>
+                    <Button size="sm" variant="ghost" onClick={() => setViewerFile(null)}>إغلاق</Button>
+                  </div>
+                  <div className="h-[70vh]" onContextMenu={(e) => e.preventDefault()}>
+                    {viewerFile.file_type === 'pdf' || viewerFile.file_url?.endsWith('.pdf') ? (
+                      <iframe src={`${viewerFile.file_url}#toolbar=0&navpanes=0&scrollbar=0`} className="h-full w-full" title={viewerFile.title} />
+                    ) : (
+                      <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted">المعاينة غير متاحة لهذا النوع — افتحه من المنصة فقط.</div>
+                    )}
+                  </div>
+                </Card>
+              )}
             </section>
 
             {/* ===== التعليقات ===== */}
