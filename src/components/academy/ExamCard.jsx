@@ -10,7 +10,8 @@ export default function ExamCard({ exam }) {
   const { submitted, id, title, description, duration_minutes, start_at, end_at } = exam;
   const now = Date.now();
   const notStarted = start_at && isFuture(start_at);
-  const closed = end_at && isPast(end_at);
+  const deadlineClosed = duration_minutes && start_at && Date.now() > new Date(start_at).getTime() + duration_minutes * 60000;
+  const closed = (end_at && isPast(end_at)) || deadlineClosed;
 
   let statusColor = 'success';
   let statusLabel = 'متاح الآن';

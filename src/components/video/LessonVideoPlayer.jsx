@@ -184,10 +184,21 @@ function DirectPlayer({ src, title, watermark, onProgress }) {
   };
 
   const toggleFullscreen = () => {
+    const v = videoRef.current;
     const box = boxRef.current;
-    if (!box) return;
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    else box.requestFullscreen?.().catch(() => {});
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+      return;
+    }
+    if (v && v.webkitEnterFullscreen) {
+      v.webkitEnterFullscreen();
+      return;
+    }
+    if (v && v.requestFullscreen) {
+      v.requestFullscreen().catch(() => box?.requestFullscreen?.().catch(() => {}));
+      return;
+    }
+    box?.requestFullscreen?.().catch(() => {});
   };
 
   return (
@@ -203,6 +214,7 @@ function DirectPlayer({ src, title, watermark, onProgress }) {
         className="h-full w-full"
         preload="metadata"
         playsInline
+        webkit-playsinline="true"
         controlsList="nodownload"
         disablePictureInPicture
         onClick={toggle}

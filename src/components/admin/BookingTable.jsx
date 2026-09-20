@@ -25,13 +25,12 @@ export default function BookingTable({ bookings, onUpdateStatus }) {
     },
     {
       key: 'month',
-      label: 'شهر الحجز / الكورس',
-      render: (b) =>
-        b.grade === 'professional' ? (
-          <span className="text-sm font-semibold text-signal">⭐ {b.notes || 'كورس احترافي'}</span>
-        ) : (
-          <span className="text-paper/90">{formatMonth(b.month)}</span>
-        )
+      label: 'الكورس / الشهر',
+      render: (b) => {
+        if (b.course_id) return <span className="text-sm font-semibold text-signal">📚 {b.courses?.title || b.course_id.slice(0, 8)}</span>;
+        if (b.grade === 'professional') return <span className="text-sm font-semibold text-signal">⭐ {b.notes || 'كورس احترافي'}</span>;
+        return <span className="text-paper/90">{formatMonth(b.month)}</span>;
+      }
     },
     {
       key: 'transfer',
@@ -42,6 +41,20 @@ export default function BookingTable({ bookings, onUpdateStatus }) {
         ) : (
           <span className="text-xs text-muted">—</span>
         )
+    },
+    {
+      key: 'proof',
+      label: 'صورة التحويل',
+      render: (b) => {
+        const proof = b.transfer_proof_url || (b.notes?.match(/\[proof:(.*?)\]/)?.[1]);
+        return proof ? (
+          <a href={proof} target="_blank" rel="noopener noreferrer">
+            <img src={proof} alt="proof" className="h-10 w-16 rounded object-cover border border-ink-600" loading="lazy" />
+          </a>
+        ) : (
+          <span className="text-xs text-muted">—</span>
+        );
+      }
     },
     {
       key: 'status',
