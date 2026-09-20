@@ -16,25 +16,42 @@ import { createBooking } from '../../services/bookingService.js';
 import { useToast } from '../../components/ui/Toast.jsx';
 import { GRADE_SHORT } from '../../config/site.js';
 import { getFriendlyError } from '../../utils/errors.js';
-import { formatDateTime } from '../../utils/formatDate.js';
 import { fetchPaymentMethods } from '../../services/paymentService.js';
+import { cn } from '../../lib/utils.js';
+import { formatDateTime } from '../../utils/formatDate.js';
+
+/** يحوّل أي رابط يوتيوب (watch / youtu.be / shorts) لصيغة embed الصالحة للتضمين */
+function toEmbedUrl(url) {
+  if (!url) return '';
+  if (url.includes('/embed/')) return url;
+  const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+  if (match) return `https://www.youtube.com/embed/${match[1]}`;
+  return url;
+}
 
 export default function CourseDetails() {
   const { courseId } = useParams();
   const { profile } = useAuth();
   const { course, loading } = useCourse(courseId, profile?.grade);
   const toast = useToast();
+
   const [lessons, setLessons] = useState([]);
   const [homeworks, setHomeworks] = useState([]);
   const [files, setFiles] = useState([]);
   const [comments, setComments] = useState([]);
   const [extraLoading, setExtraLoading] = useState(true);
   const [canAccess, setCanAccess] = useState(false);
+
+  // تعليقات
   const [commentBody, setCommentBody] = useState('');
   const [commentSubmitting, setCommentSubmitting] = useState(false);
+
+  // رفع ملفات (الطلاب)
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadSubmitting, setUploadSubmitting] = useState(false);
+
+  // اشتراك احترافي
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [subForm, setSubForm] = useState({ parent_phone: '', transfer_number: '' });
   const [submittingSub, setSubmittingSub] = useState(false);
@@ -43,21 +60,468 @@ export default function CourseDetails() {
   useEffect(() => {
     if (!courseId) return;
     setExtraLoading(true);
-    Promise.all([supabase.rpc('get_course_lessons', { p_course_id: courseId }), fetchCourseHomeworks(courseId), fetchCourseFiles(courseId), fetchCourseComments(courseId)]).then(([l, h, f, c]) => {
-      setLessons(Array.isArray(l.data) ? l.data : []); setHomeworks(Array.isArray(h.data) ? h.data : []); setFiles(Array.isArray(f.data) ? f.data : []); setComments(Array.isArray(c.data) ? c.data : []); setCanAccess(course?.accessible ?? false); setExtraLoading(false);
-    }).catch(() => setExtraLoading(false));
+    Promise.all([
+      supabase.rpc('get_course_lessons', { p_course_id: courseId }),
+      fetchCourseHomeworks(courseId),
+      fetchCourseFiles(courseId),
+      fetchCourseComments(courseId)
+    ])
+      .then(([l, h, f, c]) => {
+        const lessonList = Array.isArray(l.data) ? l.data : [];
+        const hwList = Array.isArray(h.data) ? h.data : [];
+        setLessons(lessonList);
+        setHomeworks(hwList);
+        setFiles(Array.isArray(f.data) ? f.data : []);
+        setComments(Array.isArray(c.data) ? c.data : []);
+        setCanAccess(course?.accessible ?? false);
+        setExtraLoading(false);
+      })
+      .catch(() => setExtraLoading(false));
   }, [courseId]);
-  if (loading) return <div className="space-y-4"><Skeleton className="h-10 w-64" /><Skeleton className="h-72" /></div>;
-  if (!course) return <Card className="flex flex-col items-center gap-4 py-14 text-center"><p className="text-muted">الكورس ده مش موجود.</p><Link to="/student/courses"><Button variant="secondary">رجوع للكورسات</Button></Link></Card>;
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-72" />
+      </div>
+    );
+  }
+
+  if (!course) {
+    return (
+      <Card className="flex flex-col items-center gap-4 py-14 text-center">
+        <p className="text-muted">الكورس ده مش موجود.</p>
+        <Link to="/student/courses">
+          <Button variant="secondary">رجوع للكورسات</Button>
+        </Link>
+      </Card>
+    );
+  }
+
   const isProfessional = course.grade === 'professional';
   const isMyGrade = profile?.grade === course.grade;
   const effectiveAccess = course?.accessible ?? false;
   const canWatch = Boolean(profile) && effectiveAccess && (isProfessional || isMyGrade);
+
+  // ===== التعليقات =====
+  const submitComment = async (e) => {
+    e.preventDefault();
+    if (!commentBody.trim()) return toast.error('اكتب تعليقك الأول');
+    setCommentSubmitting(true);
+    const { error } = await supabase.rpc('add_course_comment', { p_course_id: courseId, p_body: commentBody });
+    setCommentSubmitting(false);
+    if (error) return toast.error(getFriendlyError(error, 'فشل إضافة التعليق'));
+    setCommentBody('');
+    toast.success('تمت إضافة تعليقك');
+    const { data } = await fetchCourseComments(courseId);
+    setComments(data || []);
+  };
+
+  const removeMyComment = async (commentId) => {
+    if (!window.confirm('حذف تعليقك؟')) return;
+    const { error } = await deleteCourseComment(commentId);
+    if (error) return toast.error(getFriendlyError(error, 'فشل الحذف'));
+    toast.success('تم الحذف');
+    const { data } = await fetchCourseComments(courseId);
+    setComments(data || []);
+  };
+
+  // ===== رفع ملف (الطالب) =====
+  const submitUpload = async (e) => {
+    e.preventDefault();
+    if (!uploadTitle.trim()) return toast.error('اكتب اسم الملف');
+    if (!uploadFile) return toast.error('اختار ملف PDF أو ZIP الأول');
+    setUploadSubmitting(true);
+
+    const { data: upload, error: upErr } = await uploadCourseFile(uploadFile, { courseId, studentId: profile?.id });
+    if (upErr) {
+      setUploadSubmitting(false);
+      return toast.error(getFriendlyError(upErr, 'فشل رفع الملف'));
+    }
+
+    const { error } = await addCourseFile(courseId, { title: uploadTitle.trim(), fileUrl: upload.fileUrl, fileType: upload.fileType });
+    setUploadSubmitting(false);
+    if (error) return toast.error(getFriendlyError(error, 'فشل الحفظ'));
+    toast.success('تم رفع ملفك');
+    setUploadTitle('');
+    setUploadFile(null);
+    const { data } = await fetchCourseFiles(courseId);
+    setFiles(data || []);
+  };
+
+  const [viewerFile, setViewerFile] = useState(null);
+  const removeFile = async (fileId) => {
+    if (!window.confirm('حذف هذا الملف؟')) return;
+    const { error } = await deleteCourseFile(fileId);
+    if (error) return toast.error(getFriendlyError(error, 'فشل الحذف'));
+    toast.success('تم الحذف');
+    const { data } = await fetchCourseFiles(courseId);
+    setFiles(data || []);
+  };
+
+  // ===== اشتراك احترافي =====
+  const submitSubscription = async (e) => {
+    e.preventDefault();
+    if (!subForm.transfer_number.trim()) return toast.error('اكتب الرقم اللي حولت منه');
+    setSubmittingSub(true);
+    const { error } = await createBooking({
+      studentId: profile.id,
+      fullName: profile.full_name,
+      phone: profile.phone,
+      parentPhone: subForm.parent_phone,
+      grade: 'professional',
+      month: null,
+      courseId,
+      notes: `اشتراك في الكورس الاحترافي: ${course.title}`,
+      transferNumber: subForm.transfer_number.trim()
+    });
+    setSubmittingSub(false);
+    if (error) return toast.error(getFriendlyError(error, 'فشل إرسال طلب الاشتراك'));
+    toast.success('تم إرسال طلب اشتراكك — قيد مراجعة المستر، وكمل الخطوات اللي تحت');
+  };
+
   const gradeLabel = GRADE_SHORT[course.grade] || course.grade;
-  const submitComment = async (e) => { e.preventDefault(); if (!commentBody.trim()) return toast.error('اكتب تعليقك الأول'); setCommentSubmitting(true); const { error } = await supabase.rpc('add_course_comment', { p_course_id: courseId, p_body: commentBody }); setCommentSubmitting(false); if (error) return toast.error(getFriendlyError(error, 'فشل إضافة التعليق')); setCommentBody(''); toast.success('تمت إضافة تعليقك'); const { data } = await fetchCourseComments(courseId); setComments(data || []); };
-  const removeMyComment = async (commentId) => { if (!window.confirm('حذف تعليقك؟')) return; const { error } = await deleteCourseComment(commentId); if (error) return toast.error(getFriendlyError(error, 'فشل الحذف')); toast.success('تم الحذف'); const { data } = await fetchCourseComments(courseId); setComments(data || []); };
-  const submitUpload = async (e) => { e.preventDefault(); if (!uploadTitle.trim()) return toast.error('اكتب اسم الملف'); if (!uploadFile) return toast.error('اختار ملف PDF أو ZIP الأول'); setUploadSubmitting(true); const { data: upload, error: upErr } = await uploadCourseFile(uploadFile, { courseId, studentId: profile?.id }); if (upErr) { setUploadSubmitting(false); return toast.error(getFriendlyError(upErr, 'فشل رفع الملف')); } const { error } = await addCourseFile(courseId, { title: uploadTitle.trim(), fileUrl: upload.fileUrl, fileType: upload.fileType }); setUploadSubmitting(false); if (error) return toast.error(getFriendlyError(error, 'فشل الحفظ')); toast.success('تم رفع ملفك'); setUploadTitle(''); setUploadFile(null); const { data } = await fetchCourseFiles(courseId); setFiles(data || []); };
-  const removeFile = async (fileId) => { if (!window.confirm('حذف هذا الملف؟')) return; const { error } = await deleteCourseFile(fileId); if (error) return toast.error(getFriendlyError(error, 'فشل الحذف')); toast.success('تم الحذف'); const { data } = await fetchCourseFiles(courseId); setFiles(data || []); };
-  const submitSubscription = async (e) => { e.preventDefault(); if (!subForm.transfer_number.trim()) return toast.error('اكتب الرقم اللي حولت منه'); setSubmittingSub(true); const { error } = await createBooking({ studentId: profile.id, fullName: profile.full_name, phone: profile.phone, parentPhone: subForm.parent_phone, grade: 'professional', month: null, courseId, notes: `اشتراك في الكورس الاحترافي: ${course.title}`, transferNumber: subForm.transfer_number.trim() }); setSubmittingSub(false); if (error) return toast.error(getFriendlyError(error, 'فشل إرسال طلب الاشتراك')); toast.success('تم إرسال طلب اشتراكك — قيد مراجعة المستر، وكمل الخطوات اللي تحت'); };
-  return (<SubscriptionGate><div className="space-y-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-mono text-xs text-stream">#{String(course.order_index || 1).padStart(2, '0')} — {gradeLabel}</p><h1 className="mt-1 font-display text-2xl font-black">{course.title}</h1>{isProfessional && course.price != null && <p className="mt-1 text-sm font-bold text-signal">💰 سعر الكورس: {course.price} جنيه</p>}</div><Link to="/student/courses"><Button variant="secondary" size="sm"><Icon name="chevronRight" className="h-4 w-4" /> كل الكورسات</Button></Link></div>{!effectiveAccess ? (<Card className="space-y-4 p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-xl font-black">اشترك في {course.title}</h2><p className="mt-1 text-sm text-muted">{course.description || 'كورس بنظام مستويات — اشترك علشان يفتح ليك.'}</p></div><div className="text-center"><p className="font-display text-3xl font-black text-signal">{course.price ?? '—'} <span className="text-base font-bold text-muted">جنيه</span></p>{!showSubscribe && <Button className="mt-2" onClick={() => setShowSubscribe(true)}><Icon name="lock" className="h-4 w-4" /> اشترك</Button>}</div></div>{showSubscribe && (<div className="space-y-4 rounded-lens border border-signal/40 bg-signal/10 p-4"><h3 className="font-display text-base font-black text-paper">خطوات الاشتراك</h3><ul className="space-y-1.5 text-sm leading-relaxed text-paper/90">{payMethods.length ? payMethods.map((m) => <li key={m.id}>{m.name}: <b dir="ltr" className="font-mono">{m.details}</b></li>) : <li>حوّل <b>{course.price ?? '—'} جنيه</b></li>}</ul><form onSubmit={submitSubscription} className="grid gap-3 sm:grid-cols-2"><Input name="parent_phone" label="موبايل ولي الأمر (اختياري)" dir="ltr" placeholder="01xxxxxxxxx" value={subForm.parent_phone} onChange={(e) => setSubForm({ ...subForm, parent_phone: e.target.value })} /><Input name="transfer_number" label="الرقم اللي حولت منه *" dir="ltr" placeholder="01xxxxxxxxx" value={subForm.transfer_number} onChange={(e) => setSubForm({ ...subForm, transfer_number: e.target.value })} required /><div className="sm:col-span-2"><Button type="submit" loading={submittingSub} className="w-full">إرسال طلب الاشتراك</Button></div></form></div>)}</Card>) : (<><Card className="overflow-hidden"><div className="flex items-center gap-2 border-b border-ink-600 px-4 py-3"><Icon name="layers" className="h-5 w-5 text-signal" /><p className="font-display text-sm font-bold text-paper">اختر درسًا للبدء</p><span className="ms-auto rounded-full bg-ink-800 px-2 py-0.5 font-mono text-xs text-muted">{lessons.length} درس</span></div>{extraLoading ? <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3"><Skeleton className="h-32" /><Skeleton className="h-32" /><Skeleton className="h-32" /></div> : lessons.length===0 ? <p className="p-8 text-center text-sm text-muted">لا توجد دروس بعد — تابعنا قريبًا.</p> : <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">{lessons.map((lesson) => { const accessible = lesson.accessible || lesson.is_free; return (<div key={lesson.lesson_id} className={`flex flex-col rounded-lens border p-4 ${accessible ? 'border-ink-600 bg-ink-900 hover:border-signal/40' : 'border-ink-700 bg-ink-800/40 opacity-85'}`}><div className="flex items-start justify-between gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-700 font-mono text-xs font-bold text-paper">{String(lesson.order_index).padStart(2, '0')}</span><div className="flex gap-1">{lesson.is_free && <Badge color="success">مجاني</Badge>}{!accessible && <Badge color="warning">مقفول</Badge>}{accessible && !lesson.is_free && <Badge color="stream">متاح</Badge>}</div></div><h3 className="mt-3 font-display text-sm font-black text-paper line-clamp-2">{lesson.title}</h3>{lesson.description && <p className="mt-1 line-clamp-2 text-xs text-muted">{lesson.description}</p>}<div className="mt-4">{accessible ? <Link to={`/student/courses/${courseId}/lesson/${lesson.lesson_id}`}><Button size="sm" className="w-full"><Icon name="play" className="h-4 w-4" /> شاهد الدرس</Button></Link> : <Button size="sm" variant="secondary" className="w-full" onClick={() => toast.info('هذا الدرس للمشتركين — اشترك من صفحة الحجوزات')}><Icon name="lock" className="h-4 w-4" /> مقفول</Button>}</div></div>);})}</div>}</Card></>)}</div></SubscriptionGate>);
+
+  return (
+    <SubscriptionGate>
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs text-stream">#{String(course.order_index || 1).padStart(2, '0')} — {gradeLabel}</p>
+            <h1 className="mt-1 font-display text-2xl font-black">{course.title}</h1>
+            {isProfessional && course.price != null && (
+              <p className="mt-1 text-sm font-bold text-signal">💰 سعر الكورس: {course.price} جنيه</p>
+            )}
+          </div>
+          <Link to="/student/courses">
+            <Button variant="secondary" size="sm">
+              <Icon name="chevronRight" className="h-4 w-4" /> كل الكورسات
+            </Button>
+          </Link>
+        </div>
+
+        {/* ===== حاجز الدفع: لو مش مشترك اعرض الاشتراك فقط (يمنع ثغرة الرجوع) ===== */}
+        {!effectiveAccess ? (
+          <Card className="space-y-4 p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-display text-xl font-black">اشترك في {course.title}</h2>
+                <p className="mt-1 text-sm text-muted">
+                  {course.description || 'كورس احترافي بنظام مستويات — اشترك علشان يفتح ليك.'}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="font-display text-3xl font-black text-signal">{course.price ?? '—'} <span className="text-base font-bold text-muted">جنيه</span></p>
+                {!showSubscribe && (
+                  <Button className="mt-2" onClick={() => setShowSubscribe(true)}>
+                    <Icon name="lock" className="h-4 w-4" /> اشترك
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {showSubscribe && (
+              <div className="space-y-4 rounded-lens border border-signal/40 bg-signal/10 p-4">
+                <h3 className="font-display text-base font-black text-paper">خطوات الاشتراك 💳</h3>
+                <ul className="space-y-1.5 text-sm leading-relaxed text-paper/90">
+                  {payMethods.length ? payMethods.map((m) => <li key={m.id}>{m.name}: <b dir="ltr" className="font-mono">{m.details}</b></li>) : <li>حوّل <b>{course.price ?? '—'} جنيه</b> — طرق الدفع ستظهر بعد إضافتها من الإعدادات</li>}
+                </ul>
+                <form onSubmit={submitSubscription} className="grid gap-3 sm:grid-cols-2">
+                  <Input
+                    name="parent_phone"
+                    label="موبايل ولي الأمر (اختياري)"
+                    dir="ltr"
+                    placeholder="01xxxxxxxxx"
+                    value={subForm.parent_phone}
+                    onChange={(e) => setSubForm({ ...subForm, parent_phone: e.target.value })}
+                  />
+                  <Input
+                    name="transfer_number"
+                    label="الرقم اللي حولت منه *"
+                    dir="ltr"
+                    placeholder="01xxxxxxxxx"
+                    value={subForm.transfer_number}
+                    onChange={(e) => setSubForm({ ...subForm, transfer_number: e.target.value })}
+                    required
+                  />
+                  <div className="sm:col-span-2">
+                    <Button type="submit" loading={submittingSub} className="w-full">إرسال طلب الاشتراك</Button>
+                  </div>
+                </form>
+                <p className="text-xs text-muted">
+                  بعد الإرسال هتنتظر المستر يؤكد اشتراكك — وبعدها الكورس هيشتغل ليك. سؤال؟ كلم المستر من الشات.
+                </p>
+              </div>
+            )}
+          </Card>
+        ) : (
+          <>
+            {/* ===== قائمة الدروس — اختيار واضح (موبايل + ديسكتوب) ===== */}
+            <Card className="overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-600 bg-ink-800/50 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Icon name="layers" className="h-5 w-5 text-signal" />
+                  <p className="font-display text-sm font-bold text-paper">اختر درسًا للبدء</p>
+                  <Badge color="muted">{lessons.length} درس</Badge>
+                </div>
+                {effectiveAccess && <Badge color="success">مشترك</Badge>}
+                {!effectiveAccess && <Badge color="warning">يحتاج اشتراك</Badge>}
+              </div>
+
+              {extraLoading ? (
+                <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <Skeleton className="h-32" />
+                  <Skeleton className="h-32" />
+                  <Skeleton className="h-32" />
+                </div>
+              ) : lessons.length === 0 ? (
+                <p className="p-8 text-center text-sm text-muted">لا توجد دروس بعد — تابعنا قريبًا.</p>
+              ) : (
+                <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {lessons.map((lesson) => {
+                    const accessible = lesson.accessible === true || lesson.is_free === true;
+                    return (
+                      <div
+                        key={lesson.lesson_id}
+                        className={`flex flex-col rounded-lens border p-4 transition ${accessible ? 'border-ink-600 bg-ink-900 hover:border-signal/40 hover:bg-ink-800' : 'border-ink-700 bg-ink-800/40 opacity-85'}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink-700 font-mono text-xs font-bold text-paper">
+                            {String(lesson.order_index).padStart(2, '0')}
+                          </span>
+                          <div className="flex shrink-0 items-center gap-1">
+                            {lesson.is_free && <Badge color="success">مجاني</Badge>}
+                            {!accessible && <Badge color="warning">مقفول</Badge>}
+                            {accessible && !lesson.is_free && <Badge color="stream">متاح</Badge>}
+                          </div>
+                        </div>
+                        <h3 className="mt-3 font-display text-sm font-bold leading-6 text-paper line-clamp-2">{lesson.title}</h3>
+                        {lesson.description && <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted">{lesson.description}</p>}
+                        <div className="mt-2 flex items-center gap-2 text-xs text-muted">
+                          {lesson.duration_minutes ? (
+                            <span className="flex items-center gap-1">
+                              <Icon name="clock" className="h-3.5 w-3.5" /> {lesson.duration_minutes} د
+                            </span>
+                          ) : (
+                            <span>فيديو</span>
+                          )}
+                          <span className="ms-auto font-mono text-[11px]">#{String(lesson.order_index).padStart(2, '0')}</span>
+                        </div>
+                        <div className="mt-4">
+                          {accessible ? (
+                            <Link to={`/student/courses/${courseId}/lesson/${lesson.lesson_id}`} className="block">
+                              <Button size="sm" className="w-full">
+                                <Icon name="play" className="h-4 w-4" /> شاهد الدرس
+                              </Button>
+                            </Link>
+                          ) : (
+                            <Button size="sm" variant="secondary" className="w-full" onClick={() => toast.info('هذا الدرس للمشتركين — اشترك من صفحة الحجوزات')}>
+                              <Icon name="lock" className="h-4 w-4" /> مقفول
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+
+            {/* ===== الملفات (PDF/ZIP) ===== */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Icon name="download" className="h-5 w-5 text-signal" />
+                <h2 className="font-display text-lg font-bold">ملفات الدرس ({files.length})</h2>
+              </div>
+
+              <Card className="space-y-4">
+                <form onSubmit={submitUpload} className="grid gap-3 sm:grid-cols-3">
+                  <Input
+                    name="upload_title"
+                    label="اسم ملفك"
+                    placeholder="مثال: حل التمارين"
+                    value={uploadTitle}
+                    onChange={(e) => setUploadTitle(e.target.value)}
+                  />
+                  <div className="flex items-end">
+                    <input
+                      type="file"
+                      accept=".pdf,.zip"
+                      onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                      className="focus-ring block w-full rounded-lens border border-ink-600 bg-ink-900 px-3 py-2 text-sm text-paper file:mr-3 file:rounded-lens file:border-0 file:bg-signal/15 file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-signal"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button type="submit" loading={uploadSubmitting}>رفع ملف</Button>
+                  </div>
+                </form>
+
+                {files.length === 0 ? (
+                  <p className="text-sm text-muted">لا توجد ملفات بعد — المستر أو الطلاب هينزّلوها هنا.</p>
+                ) : (
+                  <ul className="divide-y divide-ink-700/60">
+                    {files.map((f) => {
+                      const mine = f.uploaded_by === profile?.id;
+                      return (
+                        <li key={f.file_id} className="flex items-center justify-between gap-3 py-2.5">
+                          <div className="min-w-0">
+                            <p className="flex items-center gap-2 text-sm font-semibold text-paper">
+                              <Badge color={f.file_type === 'pdf' ? 'danger' : f.file_type === 'zip' ? 'warning' : 'muted'}>
+                                {f.file_type === 'pdf' ? 'PDF' : f.file_type === 'zip' ? 'ZIP' : 'ملف'}
+                              </Badge>
+                              <span className="truncate">{f.title}</span>
+                            </p>
+                            <p className="text-xs text-muted">
+                              {f.uploader_name || 'طالب'} • {formatDateTime(f.created_at)}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <Button size="sm" variant="secondary" onClick={() => setViewerFile(f)}>
+                              <Icon name="eye" className="h-3.5 w-3.5" /> عرض
+                            </Button>
+                            {mine && (
+                              <Button size="sm" variant="danger" onClick={() => removeFile(f.file_id)}>
+                                <Icon name="trash" className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </Card>
+              {viewerFile && (
+                <Card className="overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-ink-700 px-4 py-3">
+                    <p className="font-semibold text-paper">{viewerFile.title}</p>
+                    <Button size="sm" variant="ghost" onClick={() => setViewerFile(null)}>إغلاق</Button>
+                  </div>
+                  <div className="h-[70vh]" onContextMenu={(e) => e.preventDefault()}>
+                    {viewerFile.file_type === 'pdf' || viewerFile.file_url?.endsWith('.pdf') ? (
+                      <iframe src={`${viewerFile.file_url}#toolbar=0&navpanes=0&scrollbar=0`} className="h-full w-full" title={viewerFile.title} />
+                    ) : (
+                      <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted">المعاينة غير متاحة لهذا النوع — افتحه من المنصة فقط.</div>
+                    )}
+                  </div>
+                </Card>
+              )}
+            </section>
+
+            {/* ===== التعليقات ===== */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Icon name="chat" className="h-5 w-5 text-signal" />
+                <h2 className="font-display text-lg font-bold">تعليقات ({comments.length})</h2>
+              </div>
+
+              <Card className="space-y-4">
+                <form onSubmit={submitComment} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <Textarea
+                    name="comment"
+                    label="اكتب تعليق أو سؤال للمستر"
+                    rows={2}
+                    placeholder="اسأل أو شارك معلومة..."
+                    value={commentBody}
+                    onChange={(e) => setCommentBody(e.target.value)}
+                  />
+                  <Button type="submit" loading={commentSubmitting}>
+                    <Icon name="send" className="h-4 w-4" /> إرسال
+                  </Button>
+                </form>
+
+                {comments.length === 0 ? (
+                  <p className="text-sm text-muted">لا توجد تعليقات بعد — كن أول من يعلق.</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {comments.map((c) => {
+                      const mine = c.student_id === profile?.id;
+                      return (
+                        <li key={c.comment_id} className="rounded-lens bg-ink-800/60 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="flex items-center gap-2 text-xs text-muted">
+                              <span className="font-semibold text-paper">{c.student_name || 'طالب'}</span>
+                              {c.is_pinned && <Badge color="warning">📌 مثبّت</Badge>}
+                              <span>{formatDateTime(c.created_at)}</span>
+                            </p>
+                            {mine && (
+                              <button
+                                type="button"
+                                onClick={() => removeMyComment(c.comment_id)}
+                                className="focus-ring text-muted hover:text-danger"
+                                aria-label="حذف تعليقك"
+                              >
+                                <Icon name="trash" className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                          <p className="mt-1.5 text-sm leading-relaxed text-paper">{c.body}</p>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </Card>
+            </section>
+
+            {/* ===== الواجبات ===== */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Icon name="edit" className="h-5 w-5 text-signal" />
+                <h2 className="font-display text-lg font-bold">واجبات الدرس ({homeworks.length})</h2>
+              </div>
+
+              {extraLoading ? (
+                <Skeleton className="h-24" />
+              ) : homeworks.length === 0 ? (
+                <Card className="text-sm text-muted">لا توجد واجبات في هذا الدرس حالياً.</Card>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {homeworks.map((h) => (
+                    <Card key={h.homework_id} className="flex flex-col gap-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lens bg-signal/15 text-signal">
+                          <Icon name="edit" className="h-5 w-5" />
+                        </div>
+                        {h.submitted ? (
+                          <Badge color="success">تم التسليم — {h.score}/{h.total_points}</Badge>
+                        ) : (
+                          <Badge color="warning">لم يُسلّم</Badge>
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="font-display font-bold text-paper">{h.title}</h3>
+                        {h.description && <p className="mt-1 text-sm text-muted line-clamp-2">{h.description}</p>}
+                      </div>
+                      <div className="mt-auto flex gap-2 pt-1">
+                        {h.submitted ? (
+                          <p className="flex-1 text-sm font-semibold text-success">اتصحح وظهرت نتيجتك ✓</p>
+                        ) : (
+                          <Link to={`/student/courses/${courseId}/homework/${h.homework_id}`} className="flex-1">
+                            <Button size="sm" className="w-full">
+                              حل الواجب
+                            </Button>
+                          </Link>
+                        )}
+                        <Button size="sm" variant="secondary" onClick={() => {
+                          const blob = new Blob([`الواجب: ${h.title}\n${h.description || ''}\n\nمن كورس: ${course.title}`], { type: 'text/plain;charset=utf-8' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `${h.title}.txt`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}><Icon name="download" className="h-4 w-4" /> تحميل</Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
+        )}
+      </div>
+    </SubscriptionGate>
+  );
 }

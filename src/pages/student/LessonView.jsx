@@ -471,8 +471,17 @@ export default function LessonView() {
                           {h.submitted ? <Badge color="success">تم التسليم — {h.score}/{h.total_points}</Badge> : <Badge color="warning">لم يُسلّم</Badge>}
                         </div>
                         <div><h3 className="font-display font-bold text-paper">{h.title}</h3>{h.description && <p className="mt-1 text-sm text-muted line-clamp-2">{h.description}</p>}</div>
-                        <div className="mt-auto pt-1">
-                          {h.submitted ? <p className="text-sm font-semibold text-success">اتصحح وظهرت نتيجتك</p> : <Link to={`/student/courses/${courseId}/homework/${h.homework_id}`}><Button size="sm" className="w-full">حل الواجب</Button></Link>}
+                        <div className="mt-auto flex gap-2 pt-1">
+                          {h.submitted ? <p className="flex-1 text-sm font-semibold text-success">اتصحح وظهرت نتيجتك</p> : <Link to={`/student/courses/${courseId}/homework/${h.homework_id}`} className="flex-1"><Button size="sm" className="w-full">حل الواجب</Button></Link>}
+                          <Button size="sm" variant="secondary" onClick={() => {
+                            const blob = new Blob([`الواجب: ${h.title}\n${h.description || ''}\n\nمن كورس: ${course.title}`], { type: 'text/plain;charset=utf-8' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `${h.title}.txt`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          }}><Icon name="download" className="h-4 w-4" /> تحميل</Button>
                         </div>
                       </Card>
                     ))}
