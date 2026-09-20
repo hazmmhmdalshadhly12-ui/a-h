@@ -60,6 +60,14 @@ function CourseManager() {
   const [lessonFile, setLessonFile] = useState(null);
   const [lessonFileTitle, setLessonFileTitle] = useState('');
   const [fileUploading, setFileUploading] = useState(false);
+  const [lessonHomeworks, setLessonHomeworks] = useState([]);
+  const [lessonFiles, setLessonFiles] = useState([]);
+
+  useEffect(() => {
+    if (!expandedLesson) return;
+    supabase.from('homeworks').select('*').eq('lesson_id', expandedLesson).order('created_at').then(({ data }) => setLessonHomeworks(data || []));
+    supabase.from('course_files').select('*').eq('lesson_id', expandedLesson).order('created_at').then(({ data }) => setLessonFiles(data || []));
+  }, [expandedLesson]);
 
   const handleVideoUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -301,7 +309,7 @@ function CourseManager() {
                       <Input placeholder="عنوان الواجب" value={hwTitle} onChange={(e) => setHwTitle(e.target.value)} />
                       {hwMode==='file' && <input type="file" onChange={(e) => setHwFile(e.target.files?.[0] || null)} className="block w-full text-sm text-muted file:mr-2 file:rounded-lens file:border-0 file:bg-signal file:px-3 file:py-1 file:text-ink" />}
                       <Button size="sm" loading={hwUploading} onClick={() => handleAddHomework(lesson.id)}>إضافة الواجب {hwMode==='file' ? 'كملف' : 'إلكتروني'}</Button>
-                      {hwMode==='electronic' && <p className="text-xs text-muted">بعد الإضافة → أضف الأسئلة من صفحة الواجبات</p>}
+                      {hwMode==='electronic' && <p className="text-xs text-muted">بعد الإضافة → أضف الأسئلة من زر إدارة الأسئلة</p>}
                     </div>
                     <div className="space-y-2">
                       <p className="text-sm font-bold text-paper">رفع ملف إضافي</p>
@@ -310,6 +318,39 @@ function CourseManager() {
                       <Button size="sm" loading={fileUploading} onClick={() => handleLessonFileUpload(lesson.id)}>رفع الملف</Button>
                     </div>
                   </div>
+                  {(lessonHomeworks.length > 0 || lessonFiles.length > 0) && (
+                    <div className="border-t border-ink-700 pt-3 space-y-3">
+                      {lessonHomeworks.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-muted mb-2">واجبات الدرس ({lessonHomeworks.length})</p>
+                          <div className="space-y-1">
+                            {lessonHomeworks.map((hw) => (
+                              <div key={hw.id} className="flex items-center justify-between gap-2 rounded-lens bg-ink-800 px-3 py-2">
+                                <span className="text-sm font-semibold text-paper truncate">{hw.title}</span>
+                                <div className="flex gap-1">
+                                  <Link to={`/admin/homeworks/${hw.id}/questions`}><Button size="xs" variant="secondary">أسئلة</Button></Link>
+                                  <Button size="xs" variant="ghost" className="text-danger" onClick={async () => { if (!confirm('حذف الواجب؟')) return; await supabase.from('homeworks').delete().eq('id', hw.id); setLessonHomeworks((prev) => prev.filter((x) => x.id !== hw.id)); }}><Icon name="trash" className="h-3 w-3" /></Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {lessonFiles.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-muted mb-2">ملفات الدرس ({lessonFiles.length})</p>
+                          <div className="space-y-1">
+                            {lessonFiles.map((f) => (
+                              <div key={f.id} className="flex items-center justify-between gap-2 rounded-lens bg-ink-800 px-3 py-2">
+                                <span className="text-sm text-paper truncate">{f.title}</span>
+                                <Button size="xs" variant="ghost" className="text-danger" onClick={async () => { await supabase.from('course_files').delete().eq('id', f.id); setLessonFiles((prev) => prev.filter((x) => x.id !== f.id)); }}><Icon name="trash" className="h-3 w-3" /></Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   </Card>
                 )}
               </div>
