@@ -14,13 +14,15 @@ function StudentLayoutInner() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen" data-accent={accent}>
+    <div className="flex min-h-screen w-full overflow-x-hidden" data-accent={accent}>
       <StudentSidebar open={open} onClose={() => setOpen(false)} />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
         <MobileNav onMenuClick={() => setOpen(true)} title="بوابة الطالب" />
         <StudentNavbar />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">
-          <Outlet />
+        <main className="flex-1 overflow-x-hidden p-4 sm:p-6 lg:p-8">
+          <div className="mx-auto w-full max-w-full min-w-0">
+            <Outlet />
+          </div>
         </main>
       </div>
       <VisionAI />
