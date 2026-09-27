@@ -186,19 +186,34 @@ function DirectPlayer({ src, title, watermark, onProgress }) {
   const toggleFullscreen = () => {
     const v = videoRef.current;
     const box = boxRef.current;
-    if (document.fullscreenElement || document.webkitFullscreenElement) {
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fsEl || (v && v.webkitDisplayingFullscreen)) {
+      if (v && v.webkitDisplayingFullscreen) {
+        v.webkitExitFullscreen?.();
+        return;
+      }
       (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
       return;
     }
-    if (v && v.webkitEnterFullscreen) {
-      v.webkitEnterFullscreen();
+    const enterBox = box?.requestFullscreen || box?.webkitRequestFullscreen;
+    if (enterBox) {
+      let r;
+      try {
+        r = enterBox.call(box);
+      } catch {
+        r = null;
+      }
+      r?.catch?.(() => {
+        if (v && v.requestFullscreen) v.requestFullscreen().catch(() => {});
+        else v?.webkitEnterFullscreen?.();
+      });
       return;
     }
     if (v && v.requestFullscreen) {
-      v.requestFullscreen().catch(() => box?.requestFullscreen?.().catch(() => {}));
+      v.requestFullscreen().catch(() => v?.webkitEnterFullscreen?.());
       return;
     }
-    box?.requestFullscreen?.().catch(() => {});
+    v?.webkitEnterFullscreen?.();
   };
 
   return (
@@ -388,8 +403,24 @@ function YouTubePlayer({ videoId, title, watermark, onProgress }) {
   const toggleFullscreen = () => {
     const box = boxRef.current;
     if (!box) return;
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    else box.requestFullscreen?.().catch(() => {});
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fsEl) {
+      (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+      return;
+    }
+    const req = box.requestFullscreen || box.webkitRequestFullscreen;
+    if (req) {
+      try {
+        Promise.resolve(req.call(box)).catch(() => {});
+      } catch {
+        /* تجاهل */
+      }
+      return;
+    }
+    const p = playerRef.current;
+    if (p?.getVideoData?.().video_id) {
+      window.open(`https://www.youtube.com/watch?v=${p.getVideoData().video_id}`, '_blank', 'noopener');
+    }
   };
 
   const start = useCallback(async () => {
@@ -413,6 +444,16 @@ function YouTubePlayer({ videoId, title, watermark, onProgress }) {
           },
           events: {
             onReady: (e) => {
+              try {
+                const fr = e.target.getIframe?.();
+                if (fr) {
+                  fr.setAttribute('allowfullscreen', 'true');
+                  fr.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
+                  fr.allowFullscreen = true;
+                }
+              } catch {
+                /* تجاهل */
+              }
               setDuration(e.target.getDuration() || 0);
               e.target.playVideo();
             },
