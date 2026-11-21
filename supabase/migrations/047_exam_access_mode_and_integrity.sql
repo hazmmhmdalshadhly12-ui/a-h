@@ -569,7 +569,17 @@ grant execute on function public.submit_exam(uuid, jsonb) to authenticated;
 -- 10) get_my_submission — إضافة review_questions (Snapshot بدون الإجابات الصحيحة)
 --     عشان مراجعة الطالب تفضل صحيحة حتى لو الأسئلة اتعدلت أو اتحذفت بعدين.
 --     العمود إضافي والتوافق مع أي كود قديم محفوظ.
+--
+--     هام: لأننا أضفنا عمودًا جديدًا للإرجاع، لا يسمح PostgreSQL بـ
+--     CREATE OR REPLACE تغيير نوع الإرجاع لدالة قائمة (خطأ 42P13)،
+--     لذا نحذف النسخة القديمة أولًا ثم ننشئها بالشكل الموسع.
+--     - الحذف بدون CASCADE: لا يمكن أن يمس أي كائن آخر، وإن وُجدت
+--       تبعية غير معروفة فشِلَ التعديل بأمان وتراجعت المعاملة كاملة.
+--     - صلاحية EXECUTE تُعاد فورًا بعد الإنشاء (grant أدناه) في نفس المعاملة.
+--     - drop function if exists يجعل الملف قابلًا لإعادة التشغيل بالكامل.
 -- ------------------------------------------------------------
+drop function if exists public.get_my_submission(uuid);
+
 create or replace function public.get_my_submission(p_exam_id uuid)
 returns table (
   id uuid,
