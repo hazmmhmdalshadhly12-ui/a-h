@@ -1,24 +1,25 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminHeader from '../../../components/admin/AdminHeader.jsx';
 import ExamBuilder from '../../../components/admin/ExamBuilder.jsx';
 import { useToast } from '../../../components/ui/Toast.jsx';
-import { createExam, replaceExamQuestions } from '../../../services/examService.js';
+import { saveExam } from '../../../services/examService.js';
 import { getFriendlyError } from '../../../utils/errors.js';
 
 export default function CreateExam() {
   const navigate = useNavigate();
   const toast = useToast();
+  const [submitting, setSubmitting] = useState(false);
 
+  // إنشاء الامتحان وأسئلته في معاملة واحدة (RPC ذرية) —
+  // فشل أي جزء لا يترك امتحانًا ناقصًا أو منشورًا بأسئلة مفقودة.
   const handleSubmit = async (payload) => {
     const { questions, ...exam } = payload;
-    const { data, error } = await createExam(exam);
+    setSubmitting(true);
+    const { error } = await saveExam({ ...exam, id: null, questions });
+    setSubmitting(false);
     if (error) {
       toast.error(getFriendlyError(error, 'فشل إنشاء الامتحان'));
-      return;
-    }
-    const { error: qError } = await replaceExamQuestions(data.id, questions);
-    if (qError) {
-      toast.error('اتعمل الامتحان بس فشل حفظ الأسئلة');
       return;
     }
     toast.success('تم إنشاء الامتحان بنجاح');
@@ -27,8 +28,8 @@ export default function CreateExam() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <AdminHeader title="امتحان جديد" subtitle="بيانات الامتحان + الأسئلة" />
-      <ExamBuilder onSubmit={handleSubmit} />
+      <AdminHeader title="امتحان جديد" subtitle="بيانات الامتحان + الأسئلة — الحفظ ذري بالكامل" />
+      <ExamBuilder onSubmit={handleSubmit} submitting={submitting} />
     </div>
   );
 }

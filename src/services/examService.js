@@ -3,11 +3,14 @@ import { safeQuery, isSupabaseConfigured } from '../lib/database.js';
 
 // ===== واجهة الطالب =====
 
-/** امتحانات منشورة لصف الطالب — مع حالة التسليم لو الطالب عاملها */
+/** امتحانات منشورة لصف الطالب — مع حالة التسليم لو الطالب عاملها.
+ *  الامتحانات الخاصة (subscribers) تظهر كذلك للطالب غير المشترك بحالة مقفولة
+ *  مع سبب المنع — أما الأسئلة والتسليم فيفرضهما الخادم وفق access_mode.
+ */
 export async function fetchExamsForStudent(studentId, grade) {
   let q = supabase
     .from('exams')
-    .select('id, title, description, grade, duration_minutes, start_at, end_at, is_published')
+    .select('id, title, description, grade, duration_minutes, start_at, end_at, is_published, access_mode')
     .eq('grade', grade)
     .eq('is_published', true)
     .order('start_at', { ascending: true });
@@ -63,6 +66,20 @@ export async function fetchExamQuestionsForStudent(examId) {
   return { data: mapped, error: null };
 }
 
+/** بدء محاولة الامتحان — الخادم يفرض كل الشروط (نشر/صف/خصوصية/وقت)
+ *  ويرجّع server_now و deadline حتى يكون العد التنازلي مصدره الخادم.
+ *  المحاولة تُسجل مرة واحدة لكل طالب — تحديث الصفحة لا يصفّر المؤقت.
+ */
+export async function startExamAttempt(examId) {
+  const { data, error } = await supabase.rpc('start_exam_attempt', { p_exam_id: examId });
+  if (error) {
+    console.error('[startExamAttempt] error:', error);
+    return { data: null, error };
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  return { data: row || null, error: null };
+}
+
 // ===== واجهة الأدمن =====
 
 export async function fetchAllExams() {
@@ -105,6 +122,19 @@ export async function updateQuestion(questionId, updates) {
 
 export async function deleteQuestion(questionId) {
   return supabase.from('exam_questions').delete().eq('id', questionId);
+}
+
+/** إنشاء/تعديل الامتحان وأسئلته في معاملة واحدة (RPC ذرية save_exam).
+ *  فشل أي جزء لا يترك امتحانًا ناقصًا، ومعرفات الأسئلة القديمة محفوظة.
+ */
+export async function saveExam(payload) {
+  const { data, error } = await supabase.rpc('save_exam', { p_payload: payload });
+  if (error) {
+    console.error('[saveExam] error:', error);
+    return { data: null, error };
+  }
+  const examId = Array.isArray(data) ? data[0] : data;
+  return { data: examId || null, error: null };
 }
 
 export async function replaceExamQuestions(examId, questions) {

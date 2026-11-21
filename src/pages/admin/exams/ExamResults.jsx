@@ -64,8 +64,14 @@ export default function ExamResults() {
   };
 
   // مراجعة إجابة طالب + الإجابة الصحيحة
+  // الأسئلة من Snapshot التسليم لو موجودة (النسخة اللي جاوب عنها الطالب فعلاً)،
+  // وإلا الأسئلة الحية — كده تعديل الأسئلة بعد التسليم لا يفسد المراجعة.
   const reviewQuestions = review?.answers || {};
-  const hasShortAnswer = questions.some((q) => q.type === 'short_answer');
+  const snapshotQuestions = Array.isArray(review?.question_snapshot?.questions)
+    ? review.question_snapshot.questions
+    : null;
+  const effectiveQuestions = snapshotQuestions && snapshotQuestions.length > 0 ? snapshotQuestions : questions;
+  const hasShortAnswer = effectiveQuestions.some((q) => q.type === 'short_answer');
   const publishedCount = submissions.filter((s) => s.grade_released).length;
 
   return (
@@ -105,7 +111,12 @@ export default function ExamResults() {
         size="lg"
       >
         <div className="space-y-4">
-          {questions.map((q, i) => {
+          {snapshotQuestions && snapshotQuestions.length > 0 && (
+            <p className="rounded-lens border border-stream/30 bg-stream/10 px-3 py-2 text-xs text-stream">
+              بتعرض النسخة الأصلية للأسئلة وقت تسليم الطالب (Snapshot) — حتى لو الامتحان اتعدل بعدين.
+            </p>
+          )}
+          {effectiveQuestions.map((q, i) => {
             const myAnswer = reviewQuestions[q.id];
             const correct = q.correct_answer;
             const isShort = q.type === 'short_answer';

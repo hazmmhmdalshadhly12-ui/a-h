@@ -4,8 +4,9 @@ import AdminHeader from '../../../components/admin/AdminHeader.jsx';
 import ExamBuilder from '../../../components/admin/ExamBuilder.jsx';
 import Card from '../../../components/ui/Card.jsx';
 import { useToast } from '../../../components/ui/Toast.jsx';
-import { fetchExamById, updateExam, fetchExamQuestions, replaceExamQuestions } from '../../../services/examService.js';
-import { isSupabaseConfigured } from '../../../lib/supabaseClient.js';
+import { fetchExamById, fetchExamQuestions, saveExam } from '../../../services/examService.js';
+import { fetchSubmissionsForExam } from '../../../services/submissionService.js';
+import { getFriendlyError } from '../../../utils/errors.js';
 
 export default function EditExam() {
   const { examId } = useParams();
@@ -13,27 +14,37 @@ export default function EditExam() {
   const toast = useToast();
   const [exam, setExam] = useState(null);
   const [questions, setQuestions] = useState([]);
+  const [submissionsCount, setSubmissionsCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     let active = true;
-    Promise.all([fetchExamById(examId), fetchExamQuestions(examId)]).then(([e, q]) => {
-      if (!active) return;
-      setExam(e.data);
-      setQuestions(q.data || []);
-      setLoading(false);
-    });
+    Promise.all([fetchExamById(examId), fetchExamQuestions(examId), fetchSubmissionsForExam(examId)]).then(
+      ([e, q, s]) => {
+        if (!active) return;
+        setExam(e.data);
+        setQuestions(q.data || []);
+        setSubmissionsCount((s.data || []).length);
+        setLoading(false);
+      }
+    );
     return () => {
       active = false;
     };
   }, [examId]);
 
+  // تعديل الامتحان وأسئلته في معاملة واحدة (RPC ذرية) —
+  // الأسئلة القديمة تتحدث بنفس معرفاتها حتى لا تنكسر مراجعة التسليمات.
   const handleSubmit = async (payload) => {
     const { questions: newQuestions, ...updates } = payload;
-    const { error } = await updateExam(examId, updates);
-    if (error) return toast.error('فشل حفظ بيانات الامتحان');
-    const { error: qError } = await replaceExamQuestions(examId, newQuestions);
-    if (qError) return toast.error('فشل حفظ الأسئلة');
+    setSubmitting(true);
+    const { error } = await saveExam({ ...updates, id: examId, questions: newQuestions });
+    setSubmitting(false);
+    if (error) {
+      toast.error(getFriendlyError(error, 'فشل حفظ الامتحان'));
+      return;
+    }
     toast.success('تم تحديث الامتحان');
     navigate('/admin/exams');
   };
@@ -57,9 +68,15 @@ export default function EditExam() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-4xl space-y-4">
       <AdminHeader title="تعديل الامتحان" subtitle={exam.title} />
-      <ExamBuilder initial={{ ...exam, questions }} onSubmit={handleSubmit} />
+      {submissionsCount > 0 && (
+        <p className="rounded-lens border border-warning/30 bg-warning/10 px-4 py-2.5 text-sm text-warning">
+          هذا الامتحان له {submissionsCount} تسليم طالب — الطلاب اللي سلموا هيراجعوا نسخة الأسئلة اللي جاوبوا
+          عنها (Snapshot محفوظة مع تسليمهم)، والتعديلات هتطبق على من لسه مسلمش.
+        </p>
+      )}
+      <ExamBuilder initial={{ ...exam, questions }} onSubmit={handleSubmit} submitting={submitting} />
     </div>
   );
 }

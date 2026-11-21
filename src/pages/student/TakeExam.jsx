@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useExam } from '../../hooks/useExams.js';
-import { fetchExamQuestionsForStudent } from '../../services/examService.js';
-import { submitExam } from '../../services/submissionService.js';
+import { fetchExamQuestionsForStudent, startExamAttempt } from '../../services/examService.js';
+import { submitExam, fetchSubmissionForExam } from '../../services/submissionService.js';
 import { useToast } from '../../components/ui/Toast.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
@@ -18,14 +18,29 @@ import SubmitExamModal from '../../components/exam/SubmitExamModal.jsx';
 import SubscriptionGate from '../../components/academy/SubscriptionGate.jsx';
 import { formatDate } from '../../utils/formatDate.js';
 import { getFriendlyError } from '../../utils/errors.js';
+import { computeRemainingSeconds } from '../../utils/examTime.js';
+import { saveDraft, loadDraft, clearDraft } from '../../utils/examDraft.js';
+
+/** هل نص الخطأ يعني "سبق تسليم هذا الامتحان" (حتى لو الاستجابة نفسها ضاعت) */
+function isAlreadySubmittedError(error) {
+  const msg = error?.message || '';
+  return (
+    error?.code === '23505' ||
+    msg.includes('already submitted') ||
+    msg.includes('محاولة واحدة')
+  );
+}
 
 export default function TakeExam() {
   const { examId } = useParams();
   const { profile } = useAuth();
-  const navigate = useNavigate();
   const toast = useToast();
 
   const { exam, submission, loading } = useExam(examId);
+  // override محلي بعد نجاح التسليم (حتى تظهر شاشة المراجعة فورًا بدون إعادة تحميل)
+  const [submissionOverride, setSubmissionOverride] = useState(null);
+  const effectiveSubmission = submissionOverride ?? submission;
+
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [current, setCurrent] = useState(0);
@@ -33,62 +48,132 @@ export default function TakeExam() {
   const [submitting, setSubmitting] = useState(false);
   const [preparing, setPreparing] = useState(true);
   const [questionsError, setQuestionsError] = useState(null);
+  const [startError, setStartError] = useState(null);
+  const [attempt, setAttempt] = useState(null);
   const [retryKey, setRetryKey] = useState(0);
   const submittingRef = useRef(false);
   const answersRef = useRef(answers);
   answersRef.current = answers;
 
-  // جلب الأسئلة (من غير الإجابات الصحيحة) — عشان المراجعة بعد التسليم كمان
-  useEffect(() => {
-    if (!examId || !exam) return;
-    let active = true;
-    setPreparing(true);
-    setQuestionsError(null);
-
-    // مؤقت أمان: لو الطلب علّق 15 ثانية → نوقف اللودر ونظهر رسالة بدل الانتظار للأبد
-    const safetyTimer = setTimeout(() => {
-      if (!active) return;
-      console.error('[TakeExam] مهلة جلب الأسئلة انتهت (15 ثانية)');
-      setQuestionsError('استغرقت الأسئلة وقت طويل جداً — تأكد من اتصالك بالإنترنت وحاول مرة أخرى');
-      setPreparing(false);
-    }, 15000);
-
-    fetchExamQuestionsForStudent(examId)
-      .then(({ data, error }) => {
-        if (!active) return;
-        if (error) {
-          setQuestionsError(getFriendlyError(error, 'فشل تحميل الأسئلة'));
-          return;
-        }
-        setQuestions(data || []);
-        const init = {};
-        (data || []).forEach((q) => {
-          init[q.id] = q.type === 'short_answer' ? '' : null;
-        });
-        setAnswers(init);
-      })
-      .catch((err) => {
-        if (!active) return;
-        console.error('[TakeExam] جلب الأسئلة فشل:', err);
-        setQuestionsError(getFriendlyError(err, 'فشل تحميل الأسئلة'));
-      })
-      .finally(() => {
-        clearTimeout(safetyTimer);
-        if (active) setPreparing(false);
-      });
-    return () => {
-      active = false;
-      clearTimeout(safetyTimer);
-    };
-  }, [examId, exam, retryKey]);
-
-  const alreadySubmitted = Boolean(submission);
+  const alreadySubmitted = Boolean(effectiveSubmission);
   const nowOpen = useMemo(() => {
     if (!exam) return false;
     const start = exam.start_at ? new Date(exam.start_at).getTime() : -Infinity;
     const end = exam.end_at ? new Date(exam.end_at).getTime() : Infinity;
     return Date.now() >= start && Date.now() <= end;
   }, [exam]);
+
+  // ===== بدء المحاولة + جلب الأسئلة =====
+  // - المراجعة بعد التسليم: الأسئلة متاحة في أي وقت (من غير محاولة جديدة)
+  // - الحل الحي: start_exam_attempt أولاً (يفرض النشر/الصف/الخصوصية/الوقت من الخادم
+  //   ويرجّع deadline الموحد) ثم جلب الأسئلة.
+  // - أول جلب للأسئلة يثبت بدء المحاولة في قاعدة البيانات — تحديث الصفحة لا يصفّر المؤقت.
+  useEffect(() => {
+    if (!examId || !exam) return;
+    let active = true;
+    setPreparing(true);
+    setQuestionsError(null);
+    setStartError(null);
+
+    // مؤقت أمان: لو الطلب علّق 15 ثانية → نوقف اللودر ونظهر رسالة بدل الانتظار للأبد
+    const safetyTimer = setTimeout(() => {
+      if (!active) return;
+      console.error('[TakeExam] مهلة تحميل الامتحان انتهت (15 ثانية)');
+      setQuestionsError('استغرقت العملية وقت طويل جداً — تأكد من اتصالك بالإنترنت وحاول مرة أخرى');
+      setPreparing(false);
+    }, 15000);
+
+    const fetchQuestions = (isReview) =>
+      fetchExamQuestionsForStudent(examId).then(({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          setQuestionsError(getFriendlyError(error, 'فشل تحميل الأسئلة'));
+          return;
+        }
+        setQuestions(data || []);
+        if (!isReview) {
+          // استرجاع المسودة المحلية (إجابات لم تُسلم بعد — لا تضيع بالتحديث أو الانقطاع)
+          const draft = profile?.id ? loadDraft(window.localStorage, examId, profile.id) : null;
+          const init = {};
+          (data || []).forEach((q) => {
+            const d = draft ? draft[q.id] : undefined;
+            init[q.id] =
+              d !== undefined && d !== null && d !== ''
+                ? d
+                : q.type === 'short_answer'
+                  ? ''
+                  : null;
+          });
+          setAnswers(init);
+        }
+      });
+
+    const run = async () => {
+      // مسار المراجعة: مسلّم من قبل → الأسئلة للمراجعة فقط
+      if (alreadySubmitted) {
+        await fetchQuestions(true);
+        return;
+      }
+
+      // مش في النافذة الزمنية → مفيش جلب أسئلة أصلاً (شاشة "غير متاح" بتتكفل)
+      if (!nowOpen) return;
+
+      // بدء المحاولة من الخادم — المصدر الوحيد للمؤقت والصلاحية
+      const { data: attemptData, error: startErr } = await startExamAttempt(examId);
+      if (!active) return;
+      if (startErr) {
+        setStartError(getFriendlyError(startErr, 'تعذر بدء الامتحان'));
+        return;
+      }
+      if (attemptData?.already_submitted) {
+        // سلم في تاب آخر — نجيب التسليم ونعرض المراجعة
+        const { data: sub } = await fetchSubmissionForExam(profile?.id, examId);
+        if (active && sub) setSubmissionOverride(sub);
+        return;
+      }
+      setAttempt(attemptData);
+      await fetchQuestions(false);
+    };
+
+    run()
+      .catch((err) => {
+        if (!active) return;
+        console.error('[TakeExam] فشل تحضير الامتحان:', err);
+        setQuestionsError(getFriendlyError(err, 'فشل تحميل الأسئلة'));
+      })
+      .finally(() => {
+        // إلغاء مؤقت الأمان فور اكتمال التحضير (نجاحًا أو فشلًا) حتى لا يطلق خطأً لاحقًا
+        clearTimeout(safetyTimer);
+        if (active) setPreparing(false);
+      });
+
+    return () => {
+      active = false;
+      clearTimeout(safetyTimer);
+    };
+  }, [examId, exam, retryKey, alreadySubmitted, nowOpen, profile?.id]);
+
+  // حفظ تلقائي للإجابات في مسودة محلية (كل تغيير) — فقط أثناء الحل وبدون تسليم
+  useEffect(() => {
+    if (alreadySubmitted || !examId || !profile?.id) return;
+    if (!questions.length) return;
+    saveDraft(window.localStorage, examId, profile.id, answers);
+  }, [answers, questions.length, alreadySubmitted, examId, profile?.id]);
+
+  // تحذير قبل مغادرة الصفحة والإجابات غير مسلمة
+  const hasAnyAnswer = useMemo(
+    () => Object.values(answers).some((v) => v !== null && v !== undefined && String(v).trim() !== ''),
+    [answers]
+  );
+  useEffect(() => {
+    if (alreadySubmitted || !hasAnyAnswer) return;
+    const handler = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [alreadySubmitted, hasAnyAnswer]);
 
   const unansweredCount = questions.filter((q) => {
     const v = answers[q.id];
@@ -102,7 +187,8 @@ export default function TakeExam() {
   }, []);
 
   // doSubmit: دالة مستقرة (بتقرأ الإجابات من ref) ومحمية من الاستدعاء الخاطئ.
-  // بتتنفذ بس من زر التأكيد أو انتهاء الوقت الفعلي — مش أثناء الـ Mount.
+  // عند الفشل: الطالب يفضل في نفس الصفحة وإجاباته محفوظة (محليًا وفي الحالة) —
+  // مفيش انتقال تلقائي لممكن يضيع الشغل، وممكن يعيد المحاولة.
   const doSubmit = useCallback(async () => {
     if (submittingRef.current) return;
     if (alreadySubmitted) return;
@@ -114,25 +200,50 @@ export default function TakeExam() {
     setModalOpen(false);
 
     if (error) {
-      // لو حد حاول يسلم مرتين → الخطأ بييجي من الـ unique constraint نفسها
-      if (error.code === '23505' || error.message?.includes('already submitted') || error.message?.includes('محاولة واحدة')) {
+      // الحالة الخاصة: الخادم سجل التسليم فعلاً لكن الاستجابة ضاعت (انقطاع لحظي)
+      // → نتحقق من الخادم مباشرة؛ لو موجود نعتبرها نجاح ولا نضيع إجابات الطالب
+      if (isAlreadySubmittedError(error)) {
+        const { data: sub } = await fetchSubmissionForExam(profile?.id, examId);
+        if (sub) {
+          clearDraft(window.localStorage, examId, profile?.id);
+          setSubmissionOverride(sub);
+          toast.success('تم تسليم هذا الامتحان من قبل — محاولتك محفوظة عندنا');
+          return;
+        }
         toast.error('انت سلّمت هذا الامتحان من قبل — محاولة واحدة فقط');
-      } else if (error.message?.includes('مشتركين مؤكدين') || error.message?.includes('الحجز')) {
-        toast.error('الامتحانات متاحة للمشتركين المؤكدين فقط — راجع حالة حجزك في صفحة الحجوزات');
-      } else if (error.message?.includes('لم يبدأ') || error.message?.includes('انتهى وقت')) {
-        toast.error('وقت الامتحان غير متاح حالياً');
-      } else if (error.message?.includes('ليس لصفك')) {
-        toast.error('هذا الامتحان ليس لصفك الحالي');
-      } else {
-        toast.error(getFriendlyError(error, 'فشل التسليم، حاول مرة أخرى'));
+        return;
       }
-      navigate('/student/exams', { replace: true });
+
+      const msg = error.message || '';
+      if (msg.includes('مشتركين') || msg.includes('المشتركين') || msg.includes('الحجز')) {
+        setStartError(
+          'هذا الامتحان خاص بالمشتركين المؤكدين — فعّل اشتراكك أولاً من صفحة الحجوزات، وإجاباتك محفوظة عندك.'
+        );
+      } else if (msg.includes('لم يبدأ') || msg.includes('انتهى وقت')) {
+        toast.error('انتهى وقت الامتحان — تعذر إكمال التسليم');
+      } else {
+        toast.error(getFriendlyError(error, 'فشل التسليم، حاول مرة أخرى — إجاباتك محفوظة'));
+      }
+      // نبقى في نفس الصفحة: الإجابات في الحالة + المسودة المحلية
       return;
     }
 
+    // نجاح مؤكد من الخادم → مسح المسودة وعرض شاشة المراجعة
+    clearDraft(window.localStorage, examId, profile?.id);
     toast.success('تم تسليم الامتحان بنجاح ✅');
-    navigate(`/student/exams/${examId}`, { replace: true });
-  }, [examId, navigate, toast, alreadySubmitted]);
+    const { data: sub } = await fetchSubmissionForExam(profile?.id, examId);
+    if (sub) {
+      setSubmissionOverride(sub);
+    } else {
+      setSubmissionOverride({ exam_id: examId, answers: answersRef.current, grade_released: false });
+    }
+  }, [examId, profile?.id, toast, alreadySubmitted]);
+
+  // الثواني المتبقية من موعد الخادم (لا يُصفَّر بالتحديث — نفس محاولة الطالب)
+  const remainingSeconds = useMemo(() => {
+    if (!attempt?.deadline || !attempt?.server_now) return null;
+    return computeRemainingSeconds(attempt.server_now, attempt.deadline);
+  }, [attempt]);
 
   // ===== شاشات الحالات =====
   if (loading) return <VisionLoader />;
@@ -141,7 +252,7 @@ export default function TakeExam() {
     return (
       <SubscriptionGate>
         <Card className="flex flex-col items-center gap-4 py-14 text-center">
-          <p className="text-muted">الامتحان غير موجود.</p>
+          <p className="text-muted">الامتحان غير موجود أو غير متاح لصفك.</p>
           <Link to="/student/exams">
             <Button variant="secondary">الرجوع للامتحانات</Button>
           </Link>
@@ -150,10 +261,48 @@ export default function TakeExam() {
     );
   }
 
-  // متسلم بالفعل → شاشة قفل + مراجعة إجاباتي (قراءة فقط)
+  // متسلم بالفعل → شاشة قفل + مراجعة إجاباتي (قراءة فقط — من Snapshot لو متاح)
   if (alreadySubmitted) {
     if (preparing) return <VisionLoader message="جاري تحميل مراجعتك..." />;
-    return <SubmittedView exam={exam} submission={submission} questions={questions} answers={submission?.answers || {}} />;
+    const reviewQuestions =
+      Array.isArray(effectiveSubmission?.review_questions) && effectiveSubmission.review_questions.length > 0
+        ? effectiveSubmission.review_questions
+        : questions;
+    return (
+      <SubmittedView
+        exam={exam}
+        submission={effectiveSubmission}
+        questions={reviewQuestions}
+        answers={effectiveSubmission?.answers || {}}
+      />
+    );
+  }
+
+  // منع بدء المحاولة من الخادم (خصوصية/اشتراك أو غيره)
+  if (startError) {
+    const isSubscription = startError.includes('مشتركين') || startError.includes('المشتركين');
+    return (
+      <Card className="flex flex-col items-center gap-4 py-14 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-warning/15 text-2xl text-warning">
+          {isSubscription ? '🔒' : '⏳'}
+        </div>
+        <p className="font-display text-lg font-bold">
+          {isSubscription ? 'هذا الامتحان خاص بالمشتركين' : 'تعذر بدء الامتحان'}
+        </p>
+        <p className="max-w-md text-sm text-muted">{startError}</p>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <Button onClick={() => setRetryKey((k) => k + 1)}>إعادة المحاولة</Button>
+          {isSubscription && (
+            <Link to="/student/bookings">
+              <Button variant="secondary">تفعيل الاشتراك</Button>
+            </Link>
+          )}
+          <Link to="/student/exams">
+            <Button variant="secondary">الرجوع للامتحانات</Button>
+          </Link>
+        </div>
+      </Card>
+    );
   }
 
   // فشل تحميل الأسئلة
@@ -215,10 +364,14 @@ export default function TakeExam() {
     <div className="mx-auto max-w-3xl space-y-5">
       <ExamHeader exam={exam} />
 
-      {/* شريط العد + التقدم */}
+      {/* شريط العد + التقدم — العد مصدره الخادم (نفس موعد الاستقطاع المفروض في التسليم) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         {exam.duration_minutes ? (
-          <ExamTimer seconds={exam.duration_minutes * 60} onExpire={doSubmit} />
+          remainingSeconds !== null ? (
+            <ExamTimer seconds={remainingSeconds} onExpire={doSubmit} />
+          ) : (
+            <ExamTimer seconds={exam.duration_minutes * 60} onExpire={doSubmit} />
+          )
         ) : (
           <Badge color="muted">بدون وقت محدد</Badge>
         )}

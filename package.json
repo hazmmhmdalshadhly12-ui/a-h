@@ -9,6 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
+    "test": "node --test",
     "format": "prettier --write \"src/**/*.{js,jsx,css}\""
   },
   "dependencies": {

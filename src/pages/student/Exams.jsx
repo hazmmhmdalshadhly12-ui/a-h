@@ -1,4 +1,5 @@
 import { useExams } from '../../hooks/useExams.js';
+import { useAccess } from '../../hooks/useAccess.js';
 import ExamCard from '../../components/academy/ExamCard.jsx';
 import SubscriptionGate from '../../components/academy/SubscriptionGate.jsx';
 import Skeleton from '../../components/ui/Skeleton.jsx';
@@ -6,6 +7,7 @@ import EmptyState from '../../components/ui/EmptyState.jsx';
 
 export default function Exams() {
   const { exams, loading } = useExams();
+  const { confirmed: subscribed, loading: accessLoading } = useAccess();
 
   return (
     <SubscriptionGate>
@@ -14,10 +16,11 @@ export default function Exams() {
           <h1 className="font-display text-2xl font-black">الامتحانات</h1>
           <p className="mt-1 text-sm text-muted">
             امتحان واحد لكل طالب — بمجرد التسليم يتقفل نهائياً من قاعدة البيانات نفسها.
+            الامتحانات العامة متاحة لكل طلاب الصف، والخاصة تتطلب اشتراكًا مؤكدًا.
           </p>
         </div>
 
-        {loading ? (
+        {loading || accessLoading ? (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="h-56" />
@@ -28,7 +31,7 @@ export default function Exams() {
         ) : (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {exams.map((e) => (
-              <ExamCard key={e.id} exam={e} />
+              <ExamCard key={e.id} exam={e} subscribed={subscribed} />
             ))}
           </div>
         )}

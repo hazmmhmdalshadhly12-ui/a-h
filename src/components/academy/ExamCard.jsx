@@ -6,12 +6,22 @@ import Icon from '../ui/Icon.jsx';
 import { formatDateTime, isFuture, isPast } from '../../utils/formatDate.js';
 import { formatDuration } from '../../utils/formatTime.js';
 
-export default function ExamCard({ exam }) {
-  const { submitted, id, title, description, duration_minutes, start_at, end_at } = exam;
+/** كارت الامتحان للطالب — بيعرض حالة الخصوصية بوضوح:
+ *  - عام: متاح لكل طلاب الصف بدون اشتراك.
+ *  - خاص بالمشتركين: لو الطالب مش مشترك → كارت مقفول مع سبب المنع
+ *    (الفعل الحقيقي بيفرضه الخادم في start_exam_attempt / get_exam_questions / submit_exam).
+ */
+export default function ExamCard({ exam, subscribed = true }) {
+  const { submitted, id, title, description, duration_minutes, start_at, end_at, access_mode } = exam;
   const now = Date.now();
   const notStarted = start_at && isFuture(start_at);
-  const deadlineClosed = duration_minutes && start_at && Date.now() > new Date(start_at).getTime() + duration_minutes * 60000;
+  const deadlineClosed =
+    duration_minutes && start_at && now > new Date(start_at).getTime() + duration_minutes * 60000;
   const closed = (end_at && isPast(end_at)) || deadlineClosed;
+
+  const isPublic = access_mode === 'public';
+  // مقفول: امتحان خاص + الطالب مش مشترك + لسه مسلمش
+  const lockedBySubscription = !isPublic && !subscribed && !submitted;
 
   let statusColor = 'success';
   let statusLabel = 'متاح الآن';
@@ -26,7 +36,7 @@ export default function ExamCard({ exam }) {
     statusLabel = 'لم يبدأ';
   }
 
-  const canTake = !submitted && !closed && !notStarted;
+  const canTake = !submitted && !closed && !notStarted && !lockedBySubscription;
 
   return (
     <Card className="flex h-full flex-col gap-3">
@@ -34,7 +44,12 @@ export default function ExamCard({ exam }) {
         <div className="flex h-11 w-11 items-center justify-center rounded-lens bg-signal/15 text-signal">
           <Icon name="exams" className="h-5 w-5" />
         </div>
-        <Badge color={statusColor}>{statusLabel}</Badge>
+        <div className="flex flex-col items-end gap-1.5">
+          <Badge color={statusColor}>{statusLabel}</Badge>
+          <Badge color={isPublic ? 'stream' : 'signal'}>
+            {isPublic ? 'امتحان عام' : 'خاص بالمشتركين'}
+          </Badge>
+        </div>
       </div>
 
       <div>
@@ -58,8 +73,19 @@ export default function ExamCard({ exam }) {
         )}
       </div>
 
-      <div className="mt-auto pt-2">
-        {canTake ? (
+      <div className="mt-auto space-y-2 pt-2">
+        {lockedBySubscription ? (
+          <>
+            <p className="rounded-lens border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-relaxed text-warning">
+              هذا الامتحان خاص بالمشتركين المؤكدين — فعّل اشتراكك أولاً حتى تستطيع دخوله.
+            </p>
+            <Link to="/student/bookings">
+              <Button variant="secondary" size="sm" className="w-full">
+                تفعيل الاشتراك
+              </Button>
+            </Link>
+          </>
+        ) : canTake ? (
           <Link to={`/student/exams/${id}`}>
             <Button className="w-full" size="sm">
               <Icon name="play" className="h-4 w-4" /> حل الامتحان

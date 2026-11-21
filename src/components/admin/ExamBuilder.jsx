@@ -18,6 +18,7 @@ export default function ExamBuilder({ initial, onSubmit, submitting }) {
     start_at: toLocalInputValue(new Date()),
     end_at: '',
     is_published: false,
+    access_mode: 'subscribers',
     ...initial
   });
   const [questions, setQuestions] = useState(initial?.questions || []);
@@ -90,6 +91,56 @@ export default function ExamBuilder({ initial, onSubmit, submitting }) {
             value={exam.end_at ? toLocalInputValue(exam.end_at) : ''}
             onChange={(e) => patch({ end_at: e.target.value })}
           />
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-medium text-paper/90">خصوصية الامتحان</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label
+              className={`flex cursor-pointer items-start gap-3 rounded-lens border p-3 text-sm transition ${
+                exam.access_mode === 'subscribers'
+                  ? 'border-signal/60 bg-signal/10 text-paper'
+                  : 'border-ink-600 bg-ink-900/40 text-muted hover:text-paper'
+              }`}
+            >
+              <input
+                type="radio"
+                name="access_mode_subscribers"
+                checked={exam.access_mode === 'subscribers'}
+                onChange={() => patch({ access_mode: 'subscribers' })}
+                className="mt-1 h-4 w-4 accent-signal"
+              />
+              <span>
+                <span className="block font-semibold">خاص بالمشتركين</span>
+                <span className="mt-0.5 block text-xs text-muted">
+                  لا يدخله إلا طلاب الصف المستهدف لديهم اشتراك مؤكد.
+                </span>
+              </span>
+            </label>
+            <label
+              className={`flex cursor-pointer items-start gap-3 rounded-lens border p-3 text-sm transition ${
+                exam.access_mode === 'public'
+                  ? 'border-stream/60 bg-stream/10 text-paper'
+                  : 'border-ink-600 bg-ink-900/40 text-muted hover:text-paper'
+              }`}
+            >
+              <input
+                type="radio"
+                name="access_mode_public"
+                checked={exam.access_mode === 'public'}
+                onChange={() => patch({ access_mode: 'public' })}
+                className="mt-1 h-4 w-4 accent-stream"
+              />
+              <span>
+                <span className="block font-semibold">امتحان عام</span>
+                <span className="mt-0.5 block text-xs text-muted">
+                  متاح لأي طالب مسجل من الصف المستهدف — بدون اشتراك.
+                </span>
+              </span>
+            </label>
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            تقدر تغيّر الخصوصية في أي وقت — الامتحانات القديمة كلها «خاصة» افتراضيًا، والمحاولات والنتائج المسجلة لا تتأثر بالتغيير.
+          </p>
         </div>
         <label className="flex cursor-pointer items-center gap-2 text-sm text-paper/90">
           <input
