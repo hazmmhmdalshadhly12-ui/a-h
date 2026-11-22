@@ -92,6 +92,11 @@ export default function ExamBuilder({ initial, onSubmit, submitting }) {
             onChange={(e) => patch({ end_at: e.target.value })}
           />
         </div>
+        <p className="text-xs leading-relaxed text-muted">
+          الامتحان متاح للطلاب من «تاريخ البدء» وحتى «تاريخ الانتهاء» إن حُدد، والمدة تُحسب
+          لكل طالب من لحظة دخوله — لو عايز امتحانًا متزامنًا للجميع اجعل «تاريخ الانتهاء» =
+          البدء + المدة.
+        </p>
         <div>
           <p className="mb-2 text-sm font-medium text-paper/90">خصوصية الامتحان</p>
           <div className="grid gap-3 sm:grid-cols-2">

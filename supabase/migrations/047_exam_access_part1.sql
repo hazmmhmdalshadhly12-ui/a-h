@@ -129,7 +129,11 @@ create trigger exams_delete_guard
 
 -- ------------------------------------------------------------
 -- 5) exam_attempt_deadline — المصدر الموحد لموعد استقطاع المحاولة
---    cutoff = أقرب ( end_at ، start_at+المدة+60ث مهلة ، بدء المحاولة+المدة+60ث مهلة )
+--    cutoff = أقرب ( end_at ، بدء المحاولة + المدة + 60ث مهلة )
+--    نافذة الدخول [start_at , end_at]: أي طالب يدخل داخلها يأخذ مدته
+--    كاملة من بدء محاولته هو — لا حد عالمي من start_at الرسمي
+--    (الحد العالمي كان يقفل الامتحان بعد المدة من نشره حتى لو لم
+--    يدخله أحد — أزيلناه؛ للامتحان المتزامن حدد end_at = البدء + المدة).
 --    end_at صارم بلا مهلة. المهلة الستينية تغطي زمن إرسال التسليم الآلي فقط.
 --    دالة داخلية: تُستدعى من دوال الجزء الثاني فقط.
 -- ------------------------------------------------------------
@@ -139,12 +143,6 @@ language sql stable
 as $$
   select least(
     coalesce(p_exam.end_at, 'infinity'::timestamptz),
-    case
-      when p_exam.duration_minutes is not null and p_exam.duration_minutes > 0
-           and p_exam.start_at is not null
-        then p_exam.start_at + make_interval(mins => p_exam.duration_minutes) + interval '60 seconds'
-      else 'infinity'::timestamptz
-    end,
     case
       when p_exam.duration_minutes is not null and p_exam.duration_minutes > 0
            and p_attempt_started is not null

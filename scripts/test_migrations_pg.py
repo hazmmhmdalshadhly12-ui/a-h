@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-اختبار 047_exam_access_part1.sql و 047_exam_access_part2.sql
+اختبار 047_exam_access_part1.sql و 047_exam_access_part2.sql + إصلاح 048
 على قاعدة PostgreSQL 16 حقيقية (pgserver) ببيانات امتحانات ونتائج قديمة.
 
 المحاكاة:
 - schema.sql  = حالة الإنتاج قبل 047 (جداول + دوال + سياسات 010/016/043)
 - seed.sql    = امتحانات قديمة + نتائج قديمة بلا question_snapshot
-- ثم: part1 → فحوص → part2 → سيناريوهات A-G
+- ثم: part1 → فحوص → part2 → سيناريوهات A-F → القسم H يعيد إنتاج
+  مشكلة الإنتاج (امتحان عام مضى على نشره 10 ساعات يظهر «غير متاح»)
+  على قاعدة منفصلة بالتعريف القديم، ويطبق 048 ويثبت زوال المشكلة
+  وعدم كسر منع التجاوز → القسم G (ترتيب خاطئ)
 """
 import json
 import sys
@@ -23,6 +26,32 @@ SCHEMA = (Path('/home/z/my-project/scripts/testdb/schema.sql')).read_text(encodi
 SEED = (Path('/home/z/my-project/scripts/testdb/seed.sql')).read_text(encoding='utf-8')
 PART1 = (BASE / 'supabase/migrations/047_exam_access_part1.sql').read_text(encoding='utf-8')
 PART2 = (BASE / 'supabase/migrations/047_exam_access_part2.sql').read_text(encoding='utf-8')
+HOTFIX = (BASE / 'supabase/migrations/048_exam_window_fix.sql').read_text(encoding='utf-8')
+
+# تعريف exam_attempt_deadline كما كان قبل إصلاح 048 (حالة قاعدة الإنتاج
+# الحالية) — يستخدمه القسم H لمحاكاة الإنتاج وإثبات أن 048 يحل المشكلة
+OLD_DEADLINE = """
+create or replace function public.exam_attempt_deadline(p_exam public.exams, p_attempt_started timestamptz)
+returns timestamptz
+language sql stable
+as $$
+  select least(
+    coalesce(p_exam.end_at, 'infinity'::timestamptz),
+    case
+      when p_exam.duration_minutes is not null and p_exam.duration_minutes > 0
+           and p_exam.start_at is not null
+        then p_exam.start_at + make_interval(mins => p_exam.duration_minutes) + interval '60 seconds'
+      else 'infinity'::timestamptz
+    end,
+    case
+      when p_exam.duration_minutes is not null and p_exam.duration_minutes > 0
+           and p_attempt_started is not null
+        then p_attempt_started + make_interval(mins => p_exam.duration_minutes) + interval '60 seconds'
+      else 'infinity'::timestamptz
+    end
+  );
+$$;
+"""
 
 # ---- معرفات ثابتة ----
 ADMIN = '00000000-0000-4000-8000-00000000ad01'
@@ -497,6 +526,141 @@ def main():
     check('F5 Snapshot ما قبل إعادة التشغيل مطابق لما بعدها',
           snap_before_rerun.get('questions')[0]['question_text']
           == snap_after.get('questions')[0]['question_text'])
+    fn_deadline = q1("select pg_get_functiondef(p.oid) from pg_proc p join pg_namespace n on n.oid=p.pronamespace "
+                     "where n.nspname='public' and p.proname='exam_attempt_deadline'")
+    check('F6 exam_attempt_deadline بعد إعادة التشغيل بلا حد عالمي من start_at (إصلاح 048)',
+          bool(fn_deadline) and 'p_exam.start_at + make_interval' not in fn_deadline[0],
+          str(fn_deadline)[:150] if fn_deadline else 'غير موجودة')
+
+    # ================= H) إصلاح 048 — إعادة إنتاج مشكلة الإنتاج ثم إثبات الإصلاح =================
+    print('\n=== H) إصلاح 048: امتحان «عام» مضى على نشره 10 ساعات (محاكاة قاعدة الإنتاج) ===')
+    # قاعدة منفصلة تحاكي الإنتاج الحالي: part1+part2 بالتعريف القديم
+    # (حد عالمي start_at+المدة) ثم نطبق 048 ونتأكد أن المشكلة اختفت.
+    fresh_db(admin_conn, 'vision_test_hotfix')
+    conn3 = psycopg.connect(uri, dbname='vision_test_hotfix', autocommit=True)
+    cur3 = conn3.cursor()
+    cur3.execute(SCHEMA)
+    cur3.execute(SEED)
+    cur3.execute(PART1)
+    cur3.execute(PART2)
+    cur3.execute(OLD_DEADLINE)  # تعريف الإنتاج الحالي (قبل 048)
+
+    def q3(sql, params=()):
+        cur3.execute(sql, params)
+        return cur3.fetchall() if cur3.description else None
+
+    def q3one(sql, params=()):
+        rows = q3(sql, params)
+        return rows[0] if rows else None
+
+    def become3(uid=None):
+        cur3.execute('reset role')
+        if uid:
+            cur3.execute("select set_config('app.current_uid', %s, false)", (str(uid),))
+            cur3.execute('set role authenticated')
+        else:
+            cur3.execute("select set_config('app.current_uid', '', false)")
+
+    def expect_error3(name, uid, sql, params, needle):
+        become3(uid)
+        try:
+            cur3.execute(sql, params)
+            got = cur3.fetchall() if cur3.description else None
+            check(name, False, f'لم يُطلق الخطأ المتوقع — النتيجة: {got}')
+        except psycopg.Error as exc:
+            check(name, needle in str(exc), str(exc).strip()[:140])
+        finally:
+            become3(None)
+
+    # نفس بلاغ المستخدم: امتحان عام منشور، بدأ قبل 10 ساعات، مدته 60 دقيقة، بلا end_at
+    payload_h = {
+        'title': 'امتحان عام منشور من 10 ساعات', 'grade': 'first_secondary',
+        'duration_minutes': 60, 'is_published': True, 'access_mode': 'public',
+        'start_at': (datetime.now(timezone.utc) - timedelta(hours=10)).isoformat(),
+        'questions': [
+            {'question_text': 'سؤال 1', 'type': 'mcq', 'options': ['أ', 'ب'],
+             'correct_answer': 'أ', 'points': 2},
+            {'question_text': 'سؤال 2', 'type': 'true_false', 'options': ['صح', 'خطأ'],
+             'correct_answer': 'صح', 'points': 1},
+        ]
+    }
+    become3(ADMIN)
+    cur3.execute('select public.save_exam(%s::jsonb)', (json.dumps(payload_h, ensure_ascii=False),))
+    HEX = str(cur3.fetchone()[0])
+    become3(None)
+    check('H1 إنشاء الامتحان المنشور (بلاغ الإنتاج) نجح', bool(HEX), HEX)
+
+    expect_error3('H2 المشكلة معاد إنتاجها: بدء محاولة بعد 10 ساعات يُرفض (غير متاح)',
+                  B, 'select public.start_exam_attempt(%s)', (HEX,), 'انتهى وقت')
+
+    try:
+        cur3.execute(HOTFIX)
+        check('H3 تطبيق 048_exam_window_fix.sql نجح', True)
+    except Exception as exc:
+        check('H3 تطبيق 048_exam_window_fix.sql نجح', False, str(exc)[:250])
+
+    become3(B)
+    stx = q3one('select public.start_exam_attempt(%s)', (HEX,))
+    become3(None)
+    # jsonb يرجّع الطوابع الزمنية نصوص ISO — نحولها لمقارنة دقيقة
+    try:
+        started_dt = datetime.fromisoformat(str(stx[0]['attempt_started_at'])) if stx else None
+        deadline_dt = datetime.fromisoformat(str(stx[0]['deadline'])) if stx else None
+    except ValueError:
+        started_dt = deadline_dt = None
+    ok_h4 = (stx and stx[0].get('already_submitted') is False
+             and started_dt is not None and deadline_dt is not None
+             and deadline_dt == started_dt + timedelta(minutes=61))
+    check('H4 بعد الإصلاح: الطالب يبدأ ويأخذ مدته كاملة (الموعد = بدء المحاولة + 60د + مهلة)',
+          bool(ok_h4), str(stx))
+
+    become3(B)
+    cur3.execute('select * from public.get_exam_questions(%s)', (HEX,))
+    qs_h = cur3.fetchall()
+    become3(None)
+    check('H5 بعد الإصلاح: جلب الأسئلة يعمل (سؤالان)', len(qs_h or []) == 2, str(qs_h)[:120])
+
+    h_ans = {str(r[0]): r[1] for r in q3(
+        'select id, correct_answer from public.exam_questions where exam_id=%s', (HEX,))}
+    become3(B)
+    cur3.execute('select public.submit_exam(%s, %s::jsonb)',
+                 (HEX, json.dumps(h_ans, ensure_ascii=False)))
+    resp_h = cur3.fetchone()[0]
+    become3(None)
+    auto_h = q3one('select auto_score from public.exam_submissions where exam_id=%s and student_id=%s', (HEX, B))
+    check('H6 بعد الإصلاح: التسليم يعمل والتصحيح الآلي صحيح (3)',
+          isinstance(resp_h, dict) and 'submission_id' in resp_h and auto_h and auto_h[0] == 3,
+          f'{resp_h} auto={auto_h}')
+
+    try:
+        cur3.execute(HOTFIX)
+        check('H7 إعادة تشغيل 048 آمنة (لا تغيير ولا خطأ)', True)
+    except Exception as exc:
+        check('H7 إعادة تشغيل 048 آمنة (لا تغيير ولا خطأ)', False, str(exc)[:250])
+
+    # امتحان آخر بنفس المواصفات — لفحوص منع التجاوز وend_at بعد الإصلاح
+    payload_h2 = dict(payload_h, title='امتحان عام آخر منشور من 10 ساعات')
+    become3(ADMIN)
+    cur3.execute('select public.save_exam(%s::jsonb)', (json.dumps(payload_h2, ensure_ascii=False),))
+    HEX2 = str(cur3.fetchone()[0])
+    become3(None)
+    expect_error3('H8 لا تجاوز: تسليم مباشر (RPC) بلا محاولة بعد (start_at+المدة) يُرفض',
+                  E, 'select public.submit_exam(%s, %s::jsonb)', (HEX2, '{}'), 'انتهى وقت')
+
+    become3(E)
+    cur3.execute('select public.start_exam_attempt(%s)', (HEX2,))
+    become3(None)
+    cur3.execute("update public.exam_attempts set started_at = now() - interval '3 hours' "
+                 "where exam_id=%s and student_id=%s", (HEX2, E))
+    expect_error3('H9 محاولة بدأت من 3 ساعات بلا تسليم: جلب الأسئلة يُرفض (المؤقت مثبت)',
+                  E, 'select * from public.get_exam_questions(%s)', (HEX2,), 'انتهى وقت')
+    expect_error3('H10 محاولة منقضية: التسليم يُرفض (محاولة واحدة لكل طالب)',
+                  E, 'select public.submit_exam(%s, %s::jsonb)', (HEX2, '{}'), 'انتهى وقت')
+
+    cur3.execute("update public.exams set end_at = now() - interval '1 hour' where id=%s", (HEX2,))
+    expect_error3('H11 end_at صارم بعد الإصلاح: بدء محاولة جديدة بعد انتهائه يُرفض',
+                  A, 'select public.start_exam_attempt(%s)', (HEX2,), 'انتهى وقت')
+    conn3.close()
 
     # ================= G) ترتيب خاطئ: الجزء 2 قبل الجزء 1 =================
     print('\n=== G) تشغيل الجزء 2 قبل الجزء 1 (يجب أن يُرفض) ===')

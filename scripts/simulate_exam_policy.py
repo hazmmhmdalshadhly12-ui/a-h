@@ -3,7 +3,9 @@
 
 هذه ليست اختبار قاعدة بيانات حية (لا يوجد PostgreSQL محلي)، بل محاكاة دقيقة
 لمنطق الدوال الأربع: start_exam_attempt / get_exam_questions / submit_exam /
-exam_attempt_deadline، تُغطي مصفوفة السيناريوهات المطلوبة (Tests A–G).
+exam_attempt_deadline (بعد إصلاح 048: المدة لكل طالب من بدء محاولته،
+والنافذة [start_at , end_at] — لا حد عالمي من start_at)،
+تُغطي مصفوفة السيناريوهات المطلوبة (Tests A–G).
 
 الاستخدام: python3 scripts/simulate_exam_policy.py
 """
@@ -86,21 +88,17 @@ class DB:
         self.submissions: dict[tuple[str, str], Submission] = {}
         self.deleted_exams: list[str] = []
 
-    # ---------- exam_attempt_deadline (SQL) ----------
+    # ---------- exam_attempt_deadline (SQL — بعد إصلاح 048) ----------
+    # cutoff = أقرب (end_at , بدء المحاولة + المدة + مهلة) — لا حد عالمي من start_at
     @staticmethod
     def deadline(exam: Exam, attempt_started: datetime | None) -> datetime:
         c1 = exam.end_at or INF
         c2 = (
-            exam.start_at + timedelta(minutes=exam.duration_minutes) + GRACE
-            if exam.duration_minutes and exam.duration_minutes > 0 and exam.start_at
-            else INF
-        )
-        c3 = (
             attempt_started + timedelta(minutes=exam.duration_minutes) + GRACE
             if exam.duration_minutes and exam.duration_minutes > 0 and attempt_started
             else INF
         )
-        return min(c1, c2, c3)
+        return min(c1, c2)
 
     # ---------- حارس الحذف (trigger) ----------
     def delete_exam(self, exam_id: str) -> None:
@@ -227,12 +225,15 @@ class DB:
         if exam.end_at and t > exam.end_at:
             raise PolicyError("انتهى وقت الامتحان")
 
+        # المهلة من بدء المحاولة، وإن لم توجد (استدعاء RPC مباشر) فالمرجع
+        # start_at الرسمي — قبل تسجيل أي محاولة جديدة (كما في SQL)
+        ref_started = attempt.started_at if attempt else exam.start_at
+        if t > self.deadline(exam, ref_started):
+            raise PolicyError("انتهى وقت الامتحان")
+
         if attempt is None:
             attempt = Attempt(exam_id, student.id, t, True)
             self.attempts[(exam_id, student.id)] = attempt
-
-        if t > self.deadline(exam, attempt.started_at):
-            raise PolicyError("انتهى وقت الامتحان")
 
         # التصحيح — نفس منطق SQL القديم تمامًا
         auto = 0.0
@@ -519,7 +520,7 @@ def scenario_e_data_integrity() -> None:
 
 
 def scenario_f_timer() -> None:
-    """Test F — المؤقت: دخول متأخر/تحديث/انتهاء الوقت/المهلة."""
+    """Test F — المؤقت بعد إصلاح 048: دخول متأخر يأخذ مدة كاملة + التحديث + المهلة + end_at."""
     db = DB()
     start = now_fn() - timedelta(minutes=50)
     eid = db.save_exam(True, {
@@ -529,9 +530,9 @@ def scenario_f_timer() -> None:
     })
     st = Student("t1")
     r = db.start_exam_attempt(st, eid)
-    # دخول متأخر 50 دقيقة: الحد العالمي start+60d+grace يبقى 10 دقائق + مهلة
-    check("F: دخول متأخر — المتبقي من موعد الخادم = 11 دقيقة",
-          r["deadline"] == start + timedelta(minutes=60) + GRACE)
+    # دخول متأخر 50 دقيقة: مدة كاملة من بدء محاولته — لا حد عالمي من start_at
+    check("F: دخول متأخر — مدة كاملة من بدء المحاولة (لا حد عالمي)",
+          r["deadline"] == r["attempt_started_at"] + timedelta(minutes=60) + GRACE)
 
     # تحديث الصفحة: المحاولة نفسها لا تُصفّر
     _NOW[0] += timedelta(minutes=5)
@@ -540,17 +541,29 @@ def scenario_f_timer() -> None:
           r2["attempt_started_at"] == r["attempt_started_at"])
     check("F: الموعد النهائي ثابت بعد التحديث", r2["deadline"] == r["deadline"])
 
-    # التسليم داخل المهلة (بعد انتهاء الـ 10 دقائق بـ 30 ثانية) مقبول بسبب مهلة الـ 60 ثانية
-    _NOW[0] = start + timedelta(minutes=60) + timedelta(seconds=30)
-    qs = db.get_exam_questions(st, eid)  # جلب الأسئلة أيضًا داخل المهلة
+    # التسليم داخل مهلة الـ 60 ثانية بعد انتهاء مدة المحاولة مقبول
+    _NOW[0] = r["attempt_started_at"] + timedelta(minutes=60, seconds=30)
+    qs = db.get_exam_questions(st, eid)
     check("F: الأسئلة متاحة داخل مهلة التسليم", len(qs) == 1)
     check("F: التسليم خلال مهلة الـ 60 ثانية مقبول", "submission_id" in db.submit_exam(st, eid, {}))
 
-    # طالب آخر يبدأ بعد المهلة (61 دقيقة + 1 ثانية من البداية العالمية) → مرفوض
+    # طالب يبدأ بعد مرور المدة من start_at — مسموح (الإصلاح: النافذة ما زالت مفتوحة)
     late = Student("t2")
     _NOW[0] = start + timedelta(minutes=61, seconds=1)
-    ok, msg = expect_policy_error(db, db.start_exam_attempt, late, eid, contains="انتهى وقت")
-    check("F: منع بدء محاولة بعد الموعد (خارج مهلة الـ 60 ثانية)", ok, msg)
+    r_late = db.start_exam_attempt(late, eid)
+    check("F: بدء محاولة بعد (start_at + المدة) مسموح — مدة كاملة من بدء المحاولة",
+          r_late["deadline"] == r_late["attempt_started_at"] + timedelta(minutes=60) + GRACE)
+
+    # منع تجاوز المؤقت: تسليم مباشر بلا محاولة بعد (start_at + المدة) يُرفض
+    eid_d = db.save_exam(True, {
+        "title": "مباشر", "grade": "first_secondary", "is_published": True, "access_mode": "public",
+        "duration_minutes": 30, "start_at": now_fn() - timedelta(hours=2),
+        "end_at": now_fn() + timedelta(hours=6),
+        "questions": [{"question_text": "س", "type": "mcq", "correct_answer": "A"}],
+    })
+    fresh = Student("t2b")
+    ok, msg = expect_policy_error(db, db.submit_exam, fresh, eid_d, {}, contains="انتهى وقت")
+    check("F: تسليم مباشر بلا محاولة بعد (start_at + المدة) يُرفض (لا تجاوز)", ok, msg)
 
     # امتحان duration بدون start_at: المهلة تبدأ من المحاولة (لا وقت مفتوح من الخادم)
     eid2 = db.save_exam(True, {
@@ -566,11 +579,11 @@ def scenario_f_timer() -> None:
     ok, msg = expect_policy_error(db, db.submit_exam, st2, eid2, {}, contains="انتهى وقت")
     check("F: التسليم بعد 31:01 دقيقة (خارج المهلة 30+1) مرفوض", ok, msg)
 
-    # end_at صارم بلا مهلة
+    # end_at صارم بلا مهلة — حتى لو مدة الطالب لم تنتهِ بعد
     _NOW[0] = datetime(2026, 11, 22, 10, 0, tzinfo=timezone.utc)
     eid3 = db.save_exam(True, {
         "title": "إغلاق صارم", "grade": "first_secondary", "is_published": True, "access_mode": "public",
-        "duration_minutes": None, "start_at": None, "end_at": now_fn() + timedelta(minutes=10),
+        "duration_minutes": 60, "start_at": None, "end_at": now_fn() + timedelta(minutes=10),
         "questions": [{"question_text": "س", "type": "mcq", "correct_answer": "A"}],
     })
     st3 = Student("t4")
@@ -578,6 +591,16 @@ def scenario_f_timer() -> None:
     _NOW[0] += timedelta(minutes=10, seconds=1)
     ok, msg = expect_policy_error(db, db.submit_exam, st3, eid3, {}, contains="انتهى وقت")
     check("F: end_at صارم بدون مهلة (نفس السلوك القديم)", ok, msg)
+    # الطالب الذي بدأ قرب end_at: موعده يُقص عند end_at نفسه
+    eid4 = db.save_exam(True, {
+        "title": "قص عند end_at", "grade": "first_secondary", "is_published": True, "access_mode": "public",
+        "duration_minutes": 60, "start_at": None, "end_at": now_fn() + timedelta(minutes=5),
+        "questions": [{"question_text": "س", "type": "mcq", "correct_answer": "A"}],
+    })
+    st4 = Student("t5")
+    r4 = db.start_exam_attempt(st4, eid4)
+    check("F: من بدأ قرب end_at — موعده يُقص عند end_at لا يتعداه",
+          r4["deadline"] == db.exams[eid4].end_at)
 
 
 def scenario_g_regression() -> None:

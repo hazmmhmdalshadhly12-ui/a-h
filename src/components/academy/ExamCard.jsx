@@ -3,8 +3,9 @@ import Card from '../ui/Card.jsx';
 import Badge from '../ui/Badge.jsx';
 import Button from '../ui/Button.jsx';
 import Icon from '../ui/Icon.jsx';
-import { formatDateTime, isFuture, isPast } from '../../utils/formatDate.js';
+import { formatDateTime } from '../../utils/formatDate.js';
 import { formatDuration } from '../../utils/formatTime.js';
+import { isExamNotStarted, isExamClosed } from '../../utils/examHelpers.js';
 
 /** كارت الامتحان للطالب — بيعرض حالة الخصوصية بوضوح:
  *  - عام: متاح لكل طلاب الصف بدون اشتراك.
@@ -13,11 +14,9 @@ import { formatDuration } from '../../utils/formatTime.js';
  */
 export default function ExamCard({ exam, subscribed = true }) {
   const { submitted, id, title, description, duration_minutes, start_at, end_at, access_mode } = exam;
-  const now = Date.now();
-  const notStarted = start_at && isFuture(start_at);
-  const deadlineClosed =
-    duration_minutes && start_at && now > new Date(start_at).getTime() + duration_minutes * 60000;
-  const closed = (end_at && isPast(end_at)) || deadlineClosed;
+  // الإغلاق بتاريخ الانتهاء فقط — المدة تُحسب لكل طالب من بدء محاولته (الخادم هو الحكم)
+  const notStarted = isExamNotStarted(exam);
+  const closed = isExamClosed(exam);
 
   const isPublic = access_mode === 'public';
   // مقفول: امتحان خاص + الطالب مش مشترك + لسه مسلمش
