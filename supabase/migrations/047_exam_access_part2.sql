@@ -1,188 +1,31 @@
 -- ============================================================
--- 047_exam_access_mode_and_integrity.sql
--- نظام الامتحانات: خصوصية مستقلة لكل امتحان + سلامة البيانات + موثوقية الوقت
---
--- 1) عمود access_mode على exams:
---    - 'public'     : امتحان عام — أي طالب مسجل من الصف المستهدف يدخله بدون اشتراك
---    - 'subscribers': امتحان خاص — يتطلب اشتراكًا مؤكدًا (السلوك الحالي لكل الامتحانات)
---    - القيمة الافتراضية للامتحانات القديمة: 'subscribers' (لا يتحول أي امتحان قديم لعام تلقائيًا)
---
--- 2) جدول exam_attempts: تسجيل وقت بدء محاولة كل طالب (المؤقت لا يُصفَّر بالتحديث)
---
--- 3) عمود question_snapshot على exam_submissions: نسخة الأسئلة التي أجاب عنها الطالب
---    (تعديل أو حذف أسئلة الامتحان لاحقًا لا يفسد مراجعة النتائج القديمة)
---
--- 4) حارس منع حذف امتحان له نتائج طلاب (بدلاً من ON DELETE CASCADE الصامت)
---
--- 5) إصلاح RPC:
---    - get_exam_questions: توحيد سياسة الوصول + النافذة الزمنية (كانت بدون فحص اشتراك/وقت)
---    - submit_exam: سياسة موحدة + مهلة محاولة من الخادم + Snapshot (بدون تسريب auto_score)
---    - start_exam_attempt (جديدة): بدء آمن للمحاولة + إرجاع موعد الاستقطاع من الخادم
---    - save_exam (جديدة): إنشاء/تعديل الامتحان وأسئلته ذريًا مع الحفاظ على معرفات الأسئلة
---
--- سياسة تغيير الخصوصية أثناء وجود محاولات:
---    - التغيير يمنع المحاولات الجديدة للطلاب غير المستوفين فورًا.
---    - المحاولات والنتائج السابقة لا تُحذف ولا تتأثر.
---    - المحاولة التي بدأت وهي مصرح بها (access_ok) تظل قابلة للاستكمال والتسليم.
---
--- هامش التسليم (Grace): 60 ثانية تُضاف على مهلة المدة فقط (وليس على end_at)
---    لتغطية زمن إرسال التسليم الآلي عند انتهاء العد التنازلي.
---
--- الملف إضافي بالكامل ولا يعدّل أي Migration قديم، وكل الأوامر آمنة لإعادة التشغيل.
+-- 047_exam_access_part2.sql — الجزء 2/2 (الأقسام 7-11)
+-- RPC الامتحانات: سياسة وصول موحدة + مؤقت من الخادم + Snapshot
+-- للمراجعة + حفظ ذري. يتطلب تنفيذ 047_exam_access_part1.sql أولاً.
+-- قابل لإعادة التشغيل بأمان.
 -- ============================================================
 
--- ------------------------------------------------------------
--- 1) عمود access_mode + قيد CHECK
--- ------------------------------------------------------------
-alter table public.exams
-  add column if not exists access_mode text not null default 'subscribers';
-
+-- تحقق: الجزء الأول نُفّذ قبل أي شيء
 do $$
 begin
   if not exists (
-    select 1 from pg_constraint
-    where conname = 'exams_access_mode_check'
-      and conrelid = 'public.exams'::regclass
-  ) then
-    alter table public.exams
-      add constraint exams_access_mode_check check (access_mode in ('public', 'subscribers'));
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'exams' and column_name = 'access_mode'
+  )
+     or to_regclass('public.exam_attempts') is null
+     or to_regprocedure('public.exam_attempt_deadline(public.exams, timestamptz)') is null then
+    raise exception '047 (الجزء 2) يتطلب تنفيذ 047_exam_access_part1.sql أولاً';
   end if;
 end
 $$;
 
-comment on column public.exams.access_mode is
-  'خصوصية الامتحان: public = عام لكل طلاب الصف، subscribers = خاص بالمشتركين المؤكدين فقط';
-
 -- ------------------------------------------------------------
--- 2) جدول exam_attempts — وقت بدء محاولة كل طالب لكل امتحان
---    (محاولة واحدة لكل طالب: unique (exam_id, student_id))
--- ------------------------------------------------------------
-create table if not exists public.exam_attempts (
-  id uuid primary key default gen_random_uuid(),
-  exam_id uuid not null references public.exams(id) on delete cascade,
-  student_id uuid not null references public.profiles(id) on delete cascade,
-  started_at timestamptz not null default now(),
-  -- هل كانت المحاولة مصرحًا بها عند بدئها؟ (لحماية محاولة جارية عند تغيير خصوصية الامتحان)
-  access_ok boolean not null default true,
-  created_at timestamptz not null default now(),
-  unique (exam_id, student_id)
-);
-
-create index if not exists exam_attempts_exam_idx on public.exam_attempts (exam_id);
-create index if not exists exam_attempts_student_idx on public.exam_attempts (student_id);
-
-alter table public.exam_attempts enable row level security;
-
--- الطلاب لا يلمسون الجدول مباشرة إطلاقًا — كل الوصول عبر RPC (security definer)
-drop policy if exists "exam_attempts: admin only direct access" on public.exam_attempts;
-create policy "exam_attempts: admin only direct access"
-  on public.exam_attempts for all to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
-
--- ------------------------------------------------------------
--- 3) عمود question_snapshot على exam_submissions
---    نسخة الأسئلة وقت التسليم (مع الإجابات الصحيحة للمراجعة الإدارية).
---    الطلاب لا يصلون لهذا العمود إلا عبر get_my_submission (بدون correct_answer).
--- ------------------------------------------------------------
-alter table public.exam_submissions
-  add column if not exists question_snapshot jsonb;
-
-comment on column public.exam_submissions.question_snapshot is
-  'Snapshot لأسئلة الامتحان لحظة التسليم — يحفظ تفسير إجابات الطالب حتى لو تعدلت الأسئلة أو حذفت لاحقًا';
-
--- ------------------------------------------------------------
--- 4) حارس حذف الامتحانات: ممنوع حذف امتحان له نتائج طلاب
---    (البديل الآمن: إلغاء النشر is_published = false)
--- ------------------------------------------------------------
-create or replace function public.prevent_exam_delete_with_submissions()
-returns trigger
-language plpgsql security definer set search_path = public
-as $$
-begin
-  if exists (select 1 from public.exam_submissions s where s.exam_id = old.id) then
-    raise exception 'لا يمكن حذف امتحان له نتائج طلاب — استخدم إلغاء النشر بدلاً من الحذف';
-  end if;
-  return old;
-end;
-$$;
-
-drop trigger if exists exams_delete_guard on public.exams;
-create trigger exams_delete_guard
-  before delete on public.exams
-  for each row execute procedure public.prevent_exam_delete_with_submissions();
-
--- ------------------------------------------------------------
--- 5) exam_attempt_deadline — المصدر الموحد لموعد استقطاع المحاولة
---    cutoff = أقرب (end_at ، start_at+duration ، started_at+duration) + مهلة 60 ثانية
---    على بنود المدة فقط. end_at صارم بلا مهلة (لا يغير سلوكه القديم).
--- ------------------------------------------------------------
-create or replace function public.exam_attempt_deadline(p_exam public.exams, p_attempt_started timestamptz)
-returns timestamptz
-language sql stable
-as $$
-  select least(
-    coalesce(p_exam.end_at, 'infinity'::timestamptz),
-    case
-      when p_exam.duration_minutes is not null and p_exam.duration_minutes > 0
-           and p_exam.start_at is not null
-        then p_exam.start_at + make_interval(mins => p_exam.duration_minutes) + interval '60 seconds'
-      else 'infinity'::timestamptz
-    end,
-    case
-      when p_exam.duration_minutes is not null and p_exam.duration_minutes > 0
-           and p_attempt_started is not null
-        then p_attempt_started + make_interval(mins => p_exam.duration_minutes) + interval '60 seconds'
-      else 'infinity'::timestamptz
-    end
-  );
-$$;
-
--- ------------------------------------------------------------
--- 6) can_access_exam — خصوصية الامتحان + الصف + النشر
---    (تُستخدم في سياسة RLS على exams لبيانات الامتحان الأساسية فقط؛
---     فرض الاشتراك الفعلي يحدث داخل RPC الأسئلة/المحاولة/التسليم)
--- ------------------------------------------------------------
-create or replace function public.can_access_exam(p_exam_id uuid)
-returns boolean
-language sql stable security definer set search_path = public
-as $$
-  select exists (
-    select 1 from public.exams e
-    where e.id = p_exam_id
-      and e.is_published = true
-      and e.grade = (select grade from public.profiles where id = auth.uid())
-      and (
-        e.access_mode = 'public'
-        or public.has_confirmed_booking()
-      )
-  );
-$$;
-
-grant execute on function public.can_access_exam(uuid) to authenticated;
-
--- سياسة RLS للامتحانات: طلاب الصف يشوفون الامتحانات المنشورة لصفهم
--- (الامتحانات الخاصة تظهر للطالب غير المشترك بحالة مقفولة مع سبب المنع —
---  أما الأسئلة والتسليم فيفرضهما الـ RPC وفق access_mode)
-drop policy if exists "exams: students read accessible" on public.exams;
-drop policy if exists "exams: students read published for own grade" on public.exams;
-create policy "exams: students read published for own grade"
-  on public.exams for select to authenticated
-  using (
-    public.is_admin()
-    or (
-      is_published = true
-      and grade = (select grade from public.profiles where id = auth.uid())
-    )
-  );
-
--- ------------------------------------------------------------
--- 7) get_exam_questions — سياسة وصول موحدة
---    مسموح فقط إذا:
---      أ) الطالب سلم من قبل (مراجعة إجاباته في أي وقت) — أو
---      ب) الامتحان منشور + لصفه + مصرح به (عام أو مشترك/محاولة سابقة مصرح بها)
---         + داخل النافذة الزمنية + قبل موعد الاستقطاع
---    أول جلب أسئلة لطالب (غير مسلم) = بدء محاولته (تثبيت المؤقت)
+-- 7) get_exam_questions — للطلاب فقط (الأدمن يقرأ exam_questions
+--    مباشرة عبر RLS). مسموح إذا:
+--    أ) الطالب سلم من قبل (مراجعة إجاباته في أي وقت)، أو
+--    ب) امتحانه المنشور + لصفه + مصرح به (عام أو مشترك/محاولة مصرح بها)
+--       + داخل النافذة الزمنية + قبل موعد الاستقطاع.
+--    أول جلب أسئلة لطالب غير مسلم = بدء محاولته (تثبيت المؤقت).
 -- ------------------------------------------------------------
 create or replace function public.get_exam_questions(p_exam_id uuid)
 returns table (
@@ -208,6 +51,11 @@ begin
     raise exception 'يجب تسجيل الدخول';
   end if;
 
+  -- فحص دور الطالب: هذه الدالة للطلاب فقط — لا يمكن للأدمن/ولي الأمر سحب الأسئلة عبرها
+  if not public.is_student() then
+    raise exception 'غير مسموح للطالب الحالي بعرض أسئلة الامتحان';
+  end if;
+
   select * into v_exam from public.exams e where e.id = p_exam_id;
   if not found then
     raise exception 'الامتحان غير موجود';
@@ -220,7 +68,7 @@ begin
     where s.exam_id = p_exam_id and s.student_id = v_student_id
   );
 
-  -- (أ) مسلّم من قبل → مراجعة إجاباته (بدون فحوصات وقت/اشتراك)
+  -- (أ) مسلّم من قبل → مراجعة (بدون فحوصات وقت/اشتراك)
   if not v_submitted then
     -- (ب) مسار الحل الحي
     if not v_exam.is_published then
@@ -235,7 +83,7 @@ begin
     from public.exam_attempts a
     where a.exam_id = p_exam_id and a.student_id = v_student_id;
 
-    -- خصوصية الامتحان: عام → متاح للصف. خاص → اشتراك مؤكد أو محاولة سابقة مصرح بها
+    -- خاص → اشتراك مؤكد أو محاولة سابقة مصرح بها (تغيير الخصوصية لا يفسد محاولة جارية)
     if v_exam.access_mode = 'subscribers'
        and not public.has_confirmed_booking()
        and coalesce(v_attempt_access_ok, false) = false then
@@ -250,16 +98,17 @@ begin
       raise exception 'انتهى وقت الامتحان';
     end if;
 
-    -- أول جلب للأسئلة = بدء المحاولة (تثبيت المؤقت ضد تحديث الصفحة)
-    if public.is_student() then
-      insert into public.exam_attempts (exam_id, student_id, access_ok)
-      values (p_exam_id, v_student_id, true)
-      on conflict (exam_id, student_id) do nothing;
+    -- أول جلب للأسئلة = بدء المحاولة (لا يُصفَّر المؤقت بتحديث الصفحة)
+    -- EXECUTE ضروري هنا: معامل الإرجاع exam_id يتعارض مع عمود جدول
+    -- exam_attempts في ON CONFLICT فيرفضه PostgreSQL كمرجع ملتبس
+    execute 'insert into public.exam_attempts (exam_id, student_id, access_ok)
+             values ($1, $2, true)
+             on conflict (exam_id, student_id) do nothing'
+    using p_exam_id, v_student_id;
 
-      select a.started_at into v_attempt_started
-      from public.exam_attempts a
-      where a.exam_id = p_exam_id and a.student_id = v_student_id;
-    end if;
+    select a.started_at into v_attempt_started
+    from public.exam_attempts a
+    where a.exam_id = p_exam_id and a.student_id = v_student_id;
 
     if now() > public.exam_attempt_deadline(v_exam, v_attempt_started) then
       raise exception 'انتهى وقت الامتحان';
@@ -292,10 +141,9 @@ $$;
 grant execute on function public.get_exam_questions(uuid) to authenticated;
 
 -- ------------------------------------------------------------
--- 8) start_exam_attempt — بدء محاولة الطالب بأمان
---    يفرض كل الشروط قبل بدء المحاولة، ويرجّع:
---    server_now + attempt_started_at + deadline (موعد الاستقطاع من الخادم)
---    حتى يكون العد التنازلي في الواجهة مصدره الخادم — لا يُصفَّر بالتحديث.
+-- 8) start_exam_attempt — يفرض كل الشروط قبل بدء المحاولة ويرجّع
+--    server_now + attempt_started_at + deadline حتى يكون العد التنازلي
+--    مصدره الخادم. المحاولة تُسجل مرة واحدة — إعادة الاستدعاء لا تُصفّرها.
 -- ------------------------------------------------------------
 create or replace function public.start_exam_attempt(p_exam_id uuid)
 returns jsonb
@@ -320,7 +168,7 @@ begin
     raise exception 'الامتحان غير موجود';
   end if;
 
-  -- سلم من قبل؟ مفيش محاولة جديدة — الواجهة تتحول للمراجعة
+  -- سلم من قبل؟ الواجهة تتحول للمراجعة
   if exists (
     select 1 from public.exam_submissions s
     where s.exam_id = p_exam_id and s.student_id = v_student_id
@@ -400,15 +248,13 @@ $$;
 grant execute on function public.start_exam_attempt(uuid) to authenticated;
 
 -- ------------------------------------------------------------
--- 9) submit_exam — سياسة وصول موحدة + مهلة من الخادم + Snapshot
---    التغييرات عن النسخ السابقة:
---    a) فحص التكرار مبكرًا (قبل سياسة الاشتراك) لتظهر رسالة "سبق التسليم" الصحيحة
---    b) الاشتراك يُفحص فقط للامتحانات الخاصة (access_mode = 'subscribers')
---       مع احترام المحاولة المصرح بها سابقًا (تغيير الخصوصية لا يفسد محاولة جارية)
---    c) المهلة تُحسب من وقت بدء محاولة الطالب (لا يُصفَّر بالتحديث) مع مهلة 60 ثانية
---    d) حفظ Snapshot للأسئلة مع التسليم — مراجعة النتائج القديمة لا تنكسر
---    e) الاستجابة لا تحتوي auto_score (كانت بتتسرب قبل نشر الدرجة)
---    طريقة احتساب الدرجات نفسها تمامًا بدون أي تغيير.
+-- 9) submit_exam — سياسة موحدة + مهلة من الخادم + Snapshot
+--    - الاشتراك يُفحص للامتحانات الخاصة فقط، مع احترام المحاولة المصرح بها
+--    - المهلة تُحسب من وقت بدء محاولة الطالب. التسليم المباشر عبر RPC
+--      بدون محاولة مسجلة: المرجع هو start_at الرسمي للامتحان —
+--      لا يُمنح وقت جديد بالاستدعاء المباشر (منع تجاوز المؤقت)
+--    - Snapshot للأسئلة مع التسليم + الدرجة لا تُرجع قبل نشرها
+--    - طريقة احتساب الدرجات نفسها تمامًا بدون تغيير
 -- ------------------------------------------------------------
 create or replace function public.submit_exam(p_exam_id uuid, p_answers jsonb)
 returns jsonb
@@ -457,7 +303,7 @@ begin
   from public.exam_attempts a
   where a.exam_id = p_exam_id and a.student_id = v_student_id;
 
-  -- خصوصية الامتحان: عام → بدون اشتراك. خاص → اشتراك مؤكد أو محاولة مصرح بها
+  -- خاص → اشتراك مؤكد أو محاولة مصرح بها (تغيير الخصوصية لا يفسد محاولة جارية)
   if v_exam.access_mode = 'subscribers'
      and not public.has_confirmed_booking()
      and coalesce(v_attempt_access_ok, false) = false then
@@ -472,22 +318,20 @@ begin
     raise exception 'انتهى وقت الامتحان';
   end if;
 
-  -- لو مفيش محاولة مسجلة (استدعاء RPC مباشر) → تُسجل الآن بنفس شروط البدء
+  -- المهلة من الخادم: مرجعها وقت بدء المحاولة، وإن لم توجد محاولة
+  -- (استدعاء RPC مباشر) فالمرجع start_at الرسمي — قبل تسجيل أي محاولة جديدة
+  if now() > public.exam_attempt_deadline(v_exam, coalesce(v_attempt_started, v_exam.start_at)) then
+    raise exception 'انتهى وقت الامتحان';
+  end if;
+
+  -- تسجيل المحاولة إن لم تكن موجودة (للسجل فقط — بعد فحص المهلة)
   if v_attempt_started is null then
     insert into public.exam_attempts (exam_id, student_id, access_ok)
     values (p_exam_id, v_student_id, true)
     on conflict (exam_id, student_id) do nothing;
-
-    select a.started_at into v_attempt_started
-    from public.exam_attempts a
-    where a.exam_id = p_exam_id and a.student_id = v_student_id;
   end if;
 
-  if now() > public.exam_attempt_deadline(v_exam, v_attempt_started) then
-    raise exception 'انتهى وقت الامتحان';
-  end if;
-
-  -- التصحيح الآلي للموضوعي (mcq + true_false) — نفس المنطق القديم بدون تغيير
+  -- التصحيح الآلي للموضوعي (mcq + true_false) — نفس المنطق القديم
   for v_question in
     select * from public.exam_questions q
     where q.exam_id = p_exam_id
@@ -500,7 +344,7 @@ begin
     end if;
   end loop;
 
-  -- الإدراج + Snapshot للأسئلة (يحفظ النسخة التي أجاب عنها الطالب)
+  -- الإدراج + Snapshot للأسئلة (النسخة التي أجاب عنها الطالب)
   insert into public.exam_submissions (exam_id, student_id, answers, auto_score, score, question_snapshot)
   values (
     p_exam_id,
@@ -532,7 +376,6 @@ begin
     raise exception 'محاولة واحدة فقط لكل امتحان — تم تسليم هذا الامتحان مسبقاً';
   end if;
 
-  -- إشعار الطالب بتأكيد التسليم
   insert into public.notifications (student_id, title, body)
   values (
     v_student_id,
@@ -540,7 +383,6 @@ begin
     coalesce((select title from public.exams where id = p_exam_id), 'الامتحان') || ' — اتستلمت إجاباتك، والنتيجة هتظهر بعد مراجعة المستر.'
   );
 
-  -- الدرجة لا تُرجع في الاستجابة — تظهر للطالب فقط بعد نشرها من الأدمن
   return jsonb_build_object('submission_id', v_submission_id);
 exception
   when unique_violation then
@@ -566,17 +408,13 @@ $$;
 grant execute on function public.submit_exam(uuid, jsonb) to authenticated;
 
 -- ------------------------------------------------------------
--- 10) get_my_submission — إضافة review_questions (Snapshot بدون الإجابات الصحيحة)
---     عشان مراجعة الطالب تفضل صحيحة حتى لو الأسئلة اتعدلت أو اتحذفت بعدين.
---     العمود إضافي والتوافق مع أي كود قديم محفوظ.
---
---     هام: لأننا أضفنا عمودًا جديدًا للإرجاع، لا يسمح PostgreSQL بـ
---     CREATE OR REPLACE تغيير نوع الإرجاع لدالة قائمة (خطأ 42P13)،
---     لذا نحذف النسخة القديمة أولًا ثم ننشئها بالشكل الموسع.
---     - الحذف بدون CASCADE: لا يمكن أن يمس أي كائن آخر، وإن وُجدت
---       تبعية غير معروفة فشِلَ التعديل بأمان وتراجعت المعاملة كاملة.
---     - صلاحية EXECUTE تُعاد فورًا بعد الإنشاء (grant أدناه) في نفس المعاملة.
---     - drop function if exists يجعل الملف قابلًا لإعادة التشغيل بالكامل.
+-- 10) get_my_submission — مراجعة تسليم الطالب + review_questions
+--     (Snapshot بدون الإجابات الصحيحة).
+--     تسليم قديم بلا Snapshot → fallback لأسئلة الامتحان الحالية
+--     (نفس سلوك المراجعة ما قبل 047).
+--     هام: أضفنا عمودًا للإرجاع → DROP أولاً لأن PostgreSQL لا يسمح
+--     بـ CREATE OR REPLACE تغيير نوع إرجاع دالة قائمة (خطأ 42P13).
+--     الحذف بدون CASCADE، والصلاحية تُعاد فورًا بعد الإنشاء بنفس المعاملة.
 -- ------------------------------------------------------------
 drop function if exists public.get_my_submission(uuid);
 
@@ -606,10 +444,23 @@ begin
            case when s.grade_released then s.score else null end as score,
            s.grade_released, s.submitted_at,
            case
-             when s.question_snapshot is null then null
+             when s.question_snapshot is not null
+                  and jsonb_typeof(s.question_snapshot->'questions') = 'array'
+               then (
+                 select coalesce(jsonb_agg(elem - 'correct_answer' order by ord), '[]'::jsonb)
+                 from jsonb_array_elements(s.question_snapshot->'questions') with ordinality as t(elem, ord)
+               )
              else (
-               select coalesce(jsonb_agg(elem - 'correct_answer' order by ord), '[]'::jsonb)
-               from jsonb_array_elements(s.question_snapshot->'questions') with ordinality as t(elem, ord)
+               select coalesce(jsonb_agg(jsonb_build_object(
+                         'id', q.id,
+                         'question_text', q.question_text,
+                         'type', q.type,
+                         'options', q.options,
+                         'points', q.points,
+                         'order_index', q.order_index
+                       ) order by q.order_index asc), '[]'::jsonb)
+               from public.exam_questions q
+               where q.exam_id = s.exam_id
              )
            end as review_questions
     from public.exam_submissions s
@@ -624,11 +475,9 @@ $$;
 grant execute on function public.get_my_submission(uuid) to authenticated;
 
 -- ------------------------------------------------------------
--- 11) save_exam — إنشاء/تعديل الامتحان وأسئلته في معاملة واحدة (ذرية كاملة)
---     - فشل أي جزء → لا يتغير شيء (لا امتحان ناقص ولا أسئلة مفقودة)
---     - الأسئلة القديمة تتحدث بنفس معرفاتها (لا حذف وإعادة إنشاء)
---     - الأسئلة المحذوفة من الواجهة تُحذف فعلاً، والتسليمات القديمة محفوظة بالـ Snapshot
---     - تحقق كامل من صحة البيانات قبل أي كتابة
+-- 11) save_exam — إنشاء/تعديل الامتحان وأسئلته في معاملة واحدة:
+--     فشل أي جزء لا يغير شيئًا. الأسئلة تتحدث بنفس معرفاتها،
+--     والمحذوفة من الواجهة تُحذف فعلاً (التسليمات القديمة محمية بالـ Snapshot)
 -- ------------------------------------------------------------
 create or replace function public.save_exam(p_payload jsonb)
 returns uuid
@@ -673,7 +522,6 @@ begin
     raise exception 'مدة الامتحان غير صحيحة';
   end if;
 
-  -- التحقق من الأسئلة قبل أي كتابة
   select count(*) into v_count from jsonb_array_elements(v_questions) t(elem);
   if v_count = 0 then
     raise exception 'أضف سؤالاً واحداً على الأقل قبل الحفظ';
@@ -692,7 +540,6 @@ begin
     end if;
   end loop;
 
-  -- إنشاء أو تحديث الامتحان
   if v_exam_id is null then
     insert into public.exams
       (title, description, grade, duration_minutes, start_at, end_at, is_published, access_mode)
@@ -723,7 +570,6 @@ begin
       where id = v_exam_id;
   end if;
 
-  -- حذف الأسئلة التي شالتها الواجهة فقط (المعرفات الموجودة في الحمولة محمية)
   delete from public.exam_questions q
   where q.exam_id = v_exam_id
     and not exists (
@@ -731,7 +577,6 @@ begin
       where t.elem ? 'id' and (t.elem->>'id')::uuid = q.id
     );
 
-  -- تحديث القائم بإذن الله وإدراج الجديد — بنفس الترتيب المرسل
   for v_q in select * from jsonb_array_elements(v_questions) with ordinality as t(elem, ord) loop
     v_qid := nullif(v_q.elem->>'id', '')::uuid;
 
