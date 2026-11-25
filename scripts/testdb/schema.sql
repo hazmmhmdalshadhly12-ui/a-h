@@ -143,6 +143,22 @@ create table public.notifications (
   created_at timestamptz not null default now()
 );
 
+-- ----- 007/039 الواجبات (الحد الأدنى المطلوب لدالة لوحة التفوق 038) -----
+create table if not exists public.homeworks (
+  id uuid primary key default gen_random_uuid(),
+  course_id uuid not null references public.courses(id) on delete cascade,
+  title text not null,
+  created_at timestamptz not null default now()
+);
+create table if not exists public.homework_submissions (
+  id uuid primary key default gen_random_uuid(),
+  homework_id uuid not null references public.homeworks(id) on delete cascade,
+  student_id uuid not null references public.profiles(id) on delete cascade,
+  auto_score numeric default 0,
+  created_at timestamptz not null default now(),
+  unique (homework_id, student_id)
+);
+
 -- ----- 043 has_confirmed_booking (النسخة الحالية في الإنتاج) -----
 create or replace function public.has_confirmed_booking()
 returns boolean

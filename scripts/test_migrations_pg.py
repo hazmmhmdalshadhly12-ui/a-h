@@ -16,17 +16,20 @@ import json
 import sys
 import traceback
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 
 import psycopg
 import pgserver
 
 BASE = Path('/home/z/my-project/vision-academy')
-SCHEMA = (Path('/home/z/my-project/scripts/testdb/schema.sql')).read_text(encoding='utf-8')
-SEED = (Path('/home/z/my-project/scripts/testdb/seed.sql')).read_text(encoding='utf-8')
+SCHEMA = (BASE / 'scripts/testdb/schema.sql').read_text(encoding='utf-8')
+SEED = (BASE / 'scripts/testdb/seed.sql').read_text(encoding='utf-8')
 PART1 = (BASE / 'supabase/migrations/047_exam_access_part1.sql').read_text(encoding='utf-8')
 PART2 = (BASE / 'supabase/migrations/047_exam_access_part2.sql').read_text(encoding='utf-8')
 HOTFIX = (BASE / 'supabase/migrations/048_exam_window_fix.sql').read_text(encoding='utf-8')
+GRADING = (BASE / 'supabase/migrations/049_essay_grading.sql').read_text(encoding='utf-8')
+LEADERBOARD = (BASE / 'supabase/migrations/038_fix_leaderboard.sql').read_text(encoding='utf-8')
 
 # تعريف exam_attempt_deadline كما كان قبل إصلاح 048 (حالة قاعدة الإنتاج
 # الحالية) — يستخدمه القسم H لمحاكاة الإنتاج وإثبات أن 048 يحل المشكلة
@@ -676,6 +679,211 @@ def main():
         check('G1 الجزء 2 بدون الجزء 1 يُرفض برسالة واضحة',
               'أولاً' in str(exc), str(exc).strip()[:140])
     conn2.close()
+
+    # ================= I) 049 — تصحيح المقالي بدرجة نهائية من نقاط الامتحان =================
+    print('\n=== I) 049: تصحيح المقالي (من إجمالي درجات الامتحان) + بوابة النشر + التعديل في أي وقت ===')
+    try:
+        cur.execute(GRADING)
+        check('I1 تطبيق 049_essay_grading.sql نجح', True)
+    except Exception as exc:
+        check('I1 تطبيق 049_essay_grading.sql نجح', False, str(exc)[:250])
+
+    # امتحان من 20: موضوعي 5 (3+2) + 3 أسئلة مقالية × 5 — عام، بلا نافذة وقت
+    payload_i = {
+        'title': 'امتحان مقالي من 20', 'grade': 'first_secondary',
+        'is_published': True, 'access_mode': 'public', 'start_at': '',
+        'questions': [
+            {'question_text': 'اختر الصحيح', 'type': 'mcq', 'options': ['أ', 'ب'], 'correct_answer': 'أ', 'points': 3},
+            {'question_text': 'صح أم خطأ', 'type': 'true_false', 'options': ['صح', 'خطأ'], 'correct_answer': 'صح', 'points': 2},
+            {'question_text': 'اشرح', 'type': 'short_answer', 'points': 5},
+            {'question_text': 'علل', 'type': 'short_answer', 'points': 5},
+            {'question_text': 'قارن', 'type': 'short_answer', 'points': 5}
+        ]
+    }
+    become(ADMIN)
+    cur.execute('select public.save_exam(%s::jsonb)', (json.dumps(payload_i, ensure_ascii=False),))
+    IEX = str(cur.fetchone()[0])
+    become(None)
+    check('I2 إنشاء امتحان المقالي (من 20 نقطة) نجح', bool(IEX), IEX)
+
+    qs_i = q('select id, type, correct_answer from public.exam_questions where exam_id=%s order by order_index', (IEX,))
+    ans_b, ans_e = {}, {}
+    for qid, qtype, qcorrect in qs_i:
+        if qtype == 'short_answer':
+            ans_b[str(qid)] = 'إجابة الطالب النصية'
+            ans_e[str(qid)] = 'إجابة مختلفة'
+        else:
+            ans_b[str(qid)] = qcorrect
+            ans_e[str(qid)] = 'خطأ'
+    for uid, ans in ((B, ans_b), (E, ans_e), (D, ans_b)):
+        become(uid)
+        cur.execute('select public.submit_exam(%s, %s::jsonb)', (IEX, json.dumps(ans, ensure_ascii=False)))
+        become(None)
+    sub_b = q1('select id, auto_score from public.exam_submissions where exam_id=%s and student_id=%s', (IEX, B))
+    sub_e = q1('select id, auto_score from public.exam_submissions where exam_id=%s and student_id=%s', (IEX, E))
+    sub_d = q1('select id, auto_score from public.exam_submissions where exam_id=%s and student_id=%s', (IEX, D))
+    check('I3 ثلاثة طلاب سلموا والموضوعي اتفحص آليًا (B=5، E=0)',
+          bool(sub_b) and sub_b[1] == 5 and bool(sub_e) and sub_e[1] == 0, f'{sub_b} {sub_e} {sub_d}')
+
+    expect_error('I4 طالب يحاول يصحح درجة → مرفوض (أدمن فقط)',
+                 B, 'select public.grade_exam_submission(%s, %s)', (sub_e[0], 10), 'غير مصرح')
+    expect_error('I5 درجة سالبة → مرفوضة',
+                 ADMIN, 'select public.grade_exam_submission(%s, %s)', (sub_b[0], -1), 'سالبة')
+    expect_error('I6 درجة أكبر من درجة الامتحان (21 من 20) → مرفوضة',
+                 ADMIN, 'select public.grade_exam_submission(%s, %s)', (sub_b[0], 21), 'أكبر من')
+
+    # المستر يدي B درجة نهائية 17 من 20 (المقالي مع الموضوعي)
+    become(ADMIN)
+    cur.execute('select public.grade_exam_submission(%s, %s)', (sub_b[0], 17))
+    gi = cur.fetchone()[0]
+    become(None)
+    ok_i7 = isinstance(gi, dict) and gi.get('total_points') == 20 and gi.get('score') == 17 \
+            and gi.get('manual_score') == 12 and gi.get('grade_released') is False
+    check('I7 تصحيح 17 من 20: jsonb صحيح (manual=12 — لسه غير منشورة)', ok_i7, str(gi))
+    row_b = q1('select score, grade_released from public.exam_submissions where id=%s', (sub_b[0],))
+    become(B)
+    my_b = q1('select score, auto_score, manual_score from public.get_my_submission(%s)', (IEX,))
+    become(None)
+    check('I8 الدرجة محفوظة والطالب مش شايفها قبل النشر (تستنى المدرس)',
+          bool(row_b) and row_b[0] == 17 and row_b[1] is False
+          and bool(my_b) and my_b[0] is None and my_b[1] is None and my_b[2] is None,
+          f'{row_b} {my_b}')
+
+    # نشر قبل تصحيح المقالي → مرفوض (الموضوعي والمقالي مع بعض)
+    expect_error('I9 نشر تسليم مقاليه غير مصحح → مرفوض',
+                 ADMIN, 'select public.publish_grade(%s)', (sub_e[0],), 'لا يمكن النشر')
+
+    become(ADMIN)
+    cur.execute('select public.publish_grade(%s)', (sub_b[0],))
+    become(None)
+    row_b = q1('select score, grade_released from public.exam_submissions where id=%s', (sub_b[0],))
+    become(B)
+    my_b = q1('select score, auto_score, manual_score from public.get_my_submission(%s)', (IEX,))
+    become(None)
+    notif_b = q("select count(*) from public.notifications where student_id=%s and title='درجتك اتعلنت'", (B,))[0][0]
+    check('I10 النشر: 17 منشورة والطالب شايفها (auto=5, manual=12) + إشعار واحد',
+          bool(row_b) and row_b[0] == 17 and row_b[1] is True
+          and bool(my_b) and my_b[0] == 17 and my_b[1] == 5 and my_b[2] == 12 and notif_b == 1,
+          f'{row_b} {my_b} notif={notif_b}')
+
+    # تعديل الدرجة بعد النشر — الطالب ولوحة التفوق يشوفوا الجديد فورًا
+    become(ADMIN)
+    cur.execute('select public.grade_exam_submission(%s, %s)', (sub_b[0], 20))
+    gi2 = cur.fetchone()[0]
+    become(None)
+    row_b = q1('select score, grade_released from public.exam_submissions where id=%s', (sub_b[0],))
+    become(B)
+    my_b = q1('select score from public.get_my_submission(%s)', (IEX,))
+    become(None)
+    edit_notif = q("select count(*) from public.notifications where student_id=%s and title='تم تعديل درجتك'", (B,))[0][0]
+    check('I11 تعديل بعد النشر إلى 20/20: ظهرت فورًا بدون إعادة نشر + إشعار تعديل',
+          isinstance(gi2, dict) and gi2.get('score') == 20
+          and bool(row_b) and row_b[0] == 20 and row_b[1] is True
+          and bool(my_b) and my_b[0] == 20 and edit_notif == 1,
+          f'{gi2} {row_b} {my_b} edit={edit_notif}')
+
+    # تصحيح E بـ15.5 (كسور عشرية مسموحة) + نشر جماعي: المصحح فقط يتنشر
+    become(ADMIN)
+    cur.execute('select public.grade_exam_submission(%s, %s)', (sub_e[0], Decimal('15.5')))
+    cur.execute('select public.publish_exam_grades(%s)', (IEX,))
+    become(None)
+    row_e = q1('select score, grade_released from public.exam_submissions where id=%s', (sub_e[0],))
+    row_d = q1('select score, grade_released from public.exam_submissions where id=%s', (sub_d[0],))
+    become(D)
+    my_d = q1('select score from public.get_my_submission(%s)', (IEX,))
+    become(None)
+    notif_d = q("select count(*) from public.notifications where student_id=%s and title='درجتك اتعلنت'", (D,))[0][0]
+    check('I12 النشر الجماعي: E انشرت (15.5) — D (مقالي غير مصحح) استنى بلا نشر ولا إشعار',
+          bool(row_e) and float(row_e[0]) == 15.5 and row_e[1] is True
+          and bool(row_d) and row_d[1] is False
+          and bool(my_d) and my_d[0] is None and notif_d == 0,
+          f'e={row_e} d={row_d} my_d={my_d} notif={notif_d}')
+
+    # إعادة نتيجة S1 القديمة لحالة «غير منشورة» (نُشرت تجريبيًا في القسم C)
+    # حتى يمثل القسم I حالة الإنتاج: قديمة + غير منشورة + مقاليها غير مصحح
+    cur.execute('update public.exam_submissions set grade_released=false, score=3 where id=%s', (S1,))
+
+    # لوحة التفوق: المنشور فقط (038) — قبل ما الباقي يتصحح
+    cur.execute(LEADERBOARD)
+    become(B)
+    lb = q('select student_id, total_points from public.get_leaderboard(%s)', ('',))
+    become(None)
+    lb_map = {str(r[0]): float(r[1]) for r in (lb or [])}
+    check('I13 لوحة التفوق تستنى المستر: B=20 وE=15.5 — D وA غايبين (غير مصحح/غير منشور)',
+          lb_map.get(B) == 20 and lb_map.get(E) == 15.5 and D not in lb_map and A not in lb_map, str(lb_map))
+
+    # نتيجة قديمة (S1) فيها مقالي — Snapshot مجمّد من 047
+    expect_error('I14 نتيجة قديمة (S1) مقاليها غير مصحح → النشر يُرفض',
+                 ADMIN, 'select public.publish_grade(%s)', (S1,), 'لا يمكن النشر')
+    become(ADMIN)
+    cur.execute('select public.grade_exam_submission(%s, %s)', (S1, 5))
+    gi_s1 = cur.fetchone()[0]
+    cur.execute('select public.publish_grade(%s)', (S1,))
+    become(None)
+    check('I15 تصحيح القديمة 5 من 6 (من الـ Snapshot) ونشرها — المراجعة القديمة سليمة',
+          isinstance(gi_s1, dict) and gi_s1.get('total_points') == 6 and gi_s1.get('score') == 5, str(gi_s1))
+
+    # تصحيح D بالإجمالي = الآلي (مقالي صفر) عبر RPC → قابل للنشر رغم manual=0
+    become(ADMIN)
+    cur.execute('select public.grade_exam_submission(%s, %s)', (sub_d[0], 5))
+    gi_d0 = cur.fetchone()[0]
+    cur.execute('select public.publish_grade(%s)', (sub_d[0],))
+    become(None)
+    row_d = q1('select score, grade_released, manual_score from public.exam_submissions where id=%s', (sub_d[0],))
+    check('I16 إعطاء المقالي صفرًا عبر RPC (الإجمالي = الآلي) قابل للنشر — الصفر الحقيقي ليس «بانتظار»',
+          isinstance(gi_d0, dict) and gi_d0.get('score') == 5
+          and bool(row_d) and row_d[0] == 5 and row_d[1] is True and row_d[2] == 0,
+          f'{gi_d0} {row_d}')
+
+    # مسار الواجهة القديم (update مباشر لـ manual_score) لسه شغال
+    become(ADMIN)
+    cur.execute('update public.exam_submissions set manual_score = %s where id = %s', (4, sub_d[0]))
+    cur.execute('select public.publish_grade(%s)', (sub_d[0],))
+    become(None)
+    row_d = q1('select score, grade_released from public.exam_submissions where id=%s', (sub_d[0],))
+    check('I17 المسار القديم (درجة يدوية مباشرة + نشر) شغال: D = 5 آلي + 4 يدوي = 9',
+          bool(row_d) and float(row_d[0]) == 9 and row_d[1] is True, str(row_d))
+
+    # امتحان موضوعي بحت: النشر بدون أي درجة يدوية
+    payload_iox = {
+        'title': 'امتحان موضوعي فقط', 'grade': 'first_secondary',
+        'is_published': True, 'access_mode': 'public', 'start_at': '',
+        'questions': [
+            {'question_text': 'سؤال موضوعي', 'type': 'mcq', 'options': ['أ', 'ب'], 'correct_answer': 'أ', 'points': 2},
+            {'question_text': 'سؤال صح وغلط', 'type': 'true_false', 'options': ['صح', 'خطأ'], 'correct_answer': 'صح', 'points': 1}
+        ]
+    }
+    become(ADMIN)
+    cur.execute('select public.save_exam(%s::jsonb)', (json.dumps(payload_iox, ensure_ascii=False),))
+    IOX = str(cur.fetchone()[0])
+    become(None)
+    qs_io = q('select id, correct_answer from public.exam_questions where exam_id=%s order by order_index', (IOX,))
+    ans_io = {str(r[0]): r[1] for r in qs_io}
+    become(B)
+    cur.execute('select public.submit_exam(%s, %s::jsonb)', (IOX, json.dumps(ans_io, ensure_ascii=False)))
+    become(None)
+    sub_io = q1('select id, auto_score, grade_released from public.exam_submissions where exam_id=%s and student_id=%s', (IOX, B))
+    become(ADMIN)
+    cur.execute('select public.publish_grade(%s)', (sub_io[0],))
+    become(None)
+    sub_io2 = q1('select score, grade_released from public.exam_submissions where id=%s', (sub_io[0],))
+    check('I18 امتحان موضوعي بحت: النشر فورًا بدون درجة يدوية (score=auto=3)',
+          bool(sub_io) and sub_io[1] == 3 and bool(sub_io2) and sub_io2[0] == 3 and sub_io2[1] is True,
+          f'{sub_io} {sub_io2}')
+
+    become(B)
+    lb2 = q('select student_id, total_points from public.get_leaderboard(%s)', ('',))
+    become(None)
+    lb2_map = {str(r[0]): float(r[1]) for r in (lb2 or [])}
+    check('I19 لوحة التفوق النهائية بعد النشر: B=23 وE=15.5 وD=9 وA=5',
+          lb2_map.get(B) == 23 and lb2_map.get(E) == 15.5 and lb2_map.get(D) == 9 and lb2_map.get(A) == 5,
+          str(lb2_map))
+
+    try:
+        cur.execute(GRADING)
+        check('I20 إعادة تشغيل 049 آمنة (لا تغيير ولا خطأ)', True)
+    except Exception as exc:
+        check('I20 إعادة تشغيل 049 آمنة (لا تغيير ولا خطأ)', False, str(exc)[:250])
 
     print(f'\n{"=" * 60}')
     print(f'النتيجة النهائية: {PASS} ناجح / {FAIL} فاشل')

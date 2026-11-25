@@ -10,11 +10,13 @@ import { useToast } from '../../../components/ui/Toast.jsx';
 import { fetchExamById, fetchExamQuestions } from '../../../services/examService.js';
 import {
   fetchSubmissionsForExam,
-  setManualScore,
+  gradeExamSubmission,
   publishGrade,
   publishAllGrades
 } from '../../../services/submissionService.js';
 import { QUESTION_TYPES } from '../../../config/constants.js';
+import { getSubmissionGradingInfo } from '../../../utils/examHelpers.js';
+import { getFriendlyError } from '../../../utils/errors.js';
 
 export default function ExamResults() {
   const { examId } = useParams();
@@ -41,25 +43,37 @@ export default function ExamResults() {
     load();
   }, [load]);
 
-  const handleManualScore = async (submissionId, manualScore) => {
-    const { error } = await setManualScore(submissionId, manualScore);
-    if (error) return toast.error('فشل حفظ الدرجة اليدوية');
-    toast.success('تم حفظ الدرجة اليدوية');
+  const handleGrade = async (submissionId, totalScore) => {
+    const { data, error } = await gradeExamSubmission(submissionId, totalScore);
+    if (error) return toast.error(getFriendlyError(error, 'فشل حفظ الدرجة النهائية'));
+    toast.success(
+      data?.grade_released
+        ? `تم تعديل الدرجة: ${data.score} من ${data.total_points} — الطالب يشوفها فورًا`
+        : `تم حفظ الدرجة النهائية: ${data.score} من ${data.total_points} — انشرها وقت ما تجهز`
+    );
     load();
   };
 
   const handlePublishOne = async (submissionId) => {
     const { error } = await publishGrade(submissionId);
-    if (error) return toast.error('فشل نشر الدرجة');
+    if (error) return toast.error(getFriendlyError(error, 'فشل نشر الدرجة'));
     toast.success('تم نشر الدرجة للطالب');
     load();
   };
 
   const handlePublishAll = async () => {
-    if (!window.confirm('نشر كل الدرجات للطلاب؟ (الموضوعي + المقالي المُصحح)')) return;
+    const pending = submissions.filter((s) => getSubmissionGradingInfo(s, questions).essayPending).length;
+    const msg = pending > 0
+      ? `نشر الدرجات المصححة فقط؟ (${pending} تسليم فيه مقالي لسه مش مصحح — هيستنى تصحيحك وما هيتنشرش دلوقتي)`
+      : 'نشر كل الدرجات للطلاب؟';
+    if (!window.confirm(msg)) return;
     const { error } = await publishAllGrades(examId);
-    if (error) return toast.error('فشل النشر الجماعي');
-    toast.success('تم نشر كل الدرجات');
+    if (error) return toast.error(getFriendlyError(error, 'فشل النشر الجماعي'));
+    toast.success(
+      pending > 0
+        ? `تم نشر الدرجات المصححة — ${pending} تسليم بيستنى تصحيح المقالي`
+        : 'تم نشر كل الدرجات'
+    );
     load();
   };
 
@@ -73,22 +87,29 @@ export default function ExamResults() {
   const effectiveQuestions = snapshotQuestions && snapshotQuestions.length > 0 ? snapshotQuestions : questions;
   const hasShortAnswer = effectiveQuestions.some((q) => q.type === 'short_answer');
   const publishedCount = submissions.filter((s) => s.grade_released).length;
+  const pendingCount = submissions.filter((s) => getSubmissionGradingInfo(s, questions).essayPending).length;
+  const examTotalPoints = (questions || []).reduce((n, q) => n + Number(q.points || 0), 0);
 
   return (
     <div className="space-y-6">
       <AdminHeader
         title={`نتائج: ${exam?.title || ''}`}
-        subtitle={`${submissions.length} تسليم — ${publishedCount} منشور للطلاب`}
+        subtitle={
+          `${submissions.length} تسليم — ${publishedCount} منشور` +
+          (pendingCount > 0 ? ` — ${pendingCount} بانتظار تصحيح المقالي` : '') +
+          (examTotalPoints > 0 ? ` — الامتحان من ${examTotalPoints} نقطة` : '')
+        }
         actions={
           <Button size="sm" variant="success" onClick={handlePublishAll}>
-            نشر كل الدرجات دفعة واحدة
+            نشر الدرجات المصححة دفعة واحدة
           </Button>
         }
       />
 
       {hasShortAnswer && (
-        <p className="rounded-lens border border-warning/30 bg-warning/10 px-4 py-2.5 text-sm text-warning">
-          في أسئلة مقالية — اكتب درجتها يدوياً في خانة "مقالي" ثم انشر.
+        <p className="rounded-lens border border-warning/30 bg-warning/10 px-4 py-2.5 text-sm leading-relaxed text-warning">
+          في أسئلة مقالية — راجع إجابات الطالب من «مراجعة» ثم اكتب الدرجة النهائية من {examTotalPoints || 'إجمالي'}
+          (تقدر تعدلها في أي وقت حتى بعد النشر). النشر بياخد الموضوعي والمقالي مع بعض، وغير المصحح بيستنى تصحيحك.
         </p>
       )}
 
@@ -97,8 +118,9 @@ export default function ExamResults() {
       ) : (
         <GradeTable
           submissions={submissions}
+          questions={questions}
           onOpenReview={(s) => setReview(s)}
-          onManualScore={handleManualScore}
+          onGrade={handleGrade}
           onPublishOne={handlePublishOne}
         />
       )}

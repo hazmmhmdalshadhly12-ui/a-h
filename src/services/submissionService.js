@@ -49,14 +49,21 @@ export async function fetchSubmissionsForExam(examId) {
     .order('submitted_at', { ascending: true });
 }
 
-/** تصحيح يدوي للدرجات المقالية */
-export async function setManualScore(submissionId, manualScore) {
-  return supabase
-    .from('exam_submissions')
-    .update({ manual_score: manualScore })
-    .eq('id', submissionId)
-    .select()
-    .single();
+/** تصحيح/تعديل الدرجة النهائية لتسليم (الأدمن) — RPC موحد من الخادم:
+ *  الدرجة من مجموع نقاط الامتحان (مثلاً من 20)، والخادم يتحقق أنها بين
+ *  0 والدرجة الكاملة. أي تعديل بعد النشر يظهر للطالب ولوحة التفوق فورًا.
+ */
+export async function gradeExamSubmission(submissionId, totalScore) {
+  const { data, error } = await supabase.rpc('grade_exam_submission', {
+    p_submission_id: submissionId,
+    p_total_score: totalScore
+  });
+  if (error) {
+    console.error('[gradeExamSubmission] error:', error);
+    return { data: null, error };
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  return { data: row || null, error: null };
 }
 
 /** نشر الدرجات (وإعادة حساب الإجمالي من السيرفر) */

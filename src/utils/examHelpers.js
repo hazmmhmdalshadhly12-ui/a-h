@@ -22,6 +22,38 @@ export function isExamClosed(exam, now = Date.now()) {
   return new Date(exam.end_at).getTime() < now;
 }
 
+/** أسئلة التسليم الفعّالة: Snapshot وقت تسليم الطالب (النسخة اللي جاوب
+ *  عنها فعلاً) وإلا أسئلة الامتحان الحية — للتسليمات القديمة بلا Snapshot.
+ */
+export function effectiveSubmissionQuestions(submission, questions = []) {
+  const snap = submission?.question_snapshot?.questions;
+  if (Array.isArray(snap) && snap.length > 0) return snap;
+  return Array.isArray(questions) ? questions : [];
+}
+
+/** معلومات تصحيح تسليم (للأدمن):
+ *  - totalPoints: مجموع نقاط أسئلة التسليم (مثلاً 20)
+ *  - hasEssays: فيه أسئلة مقالية؟
+ *  - essayPending: مقالي موجود ودرجته النهائية لسه متصححتش (نفس منطق
+ *    الخادم في submission_essay_pending: غير منشور + manual_score=0
+ *    الافتراضي + لم يُصحح عبر grade_exam_submission)
+ *  - currentScore: الدرجة الفعّالة حاليًا (المنشورة أو المحسوبة محليًا)
+ */
+export function getSubmissionGradingInfo(submission, questions = []) {
+  const qs = effectiveSubmissionQuestions(submission, questions);
+  const totalPoints = qs.reduce((n, q) => n + Number(q?.points || 0), 0);
+  const hasEssays = qs.some((q) => q?.type === 'short_answer');
+  const s = submission ?? {};
+  const manual = Number(s.manual_score ?? 0);
+  const essayPending =
+    hasEssays &&
+    !s.grade_released &&
+    !s.essay_graded_at &&
+    manual === 0;
+  const currentScore = Number(s.score ?? (Number(s.auto_score || 0) + manual));
+  return { totalPoints, hasEssays, essayPending, currentScore };
+}
+
 /** مقارنة الإجابات — للعرض/المراجعة بس */
 export function isAnswerCorrect(question, answer) {
   if (question.type === 'true_false') {
